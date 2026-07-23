@@ -1,15 +1,18 @@
 import random
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import llm
+from . import llm, skills_runtime
 from .db import get_session, init_db
-from .models import Agent, Memory, Skill, User, now
-from .seed import seed
+from .models import Agent, Artifact, Memory, Skill, User, now
+from .seed import seed, sync_default_skills
 
 app = FastAPI(title="My Tamagotchi API")
 app.add_middleware(
@@ -24,6 +27,7 @@ app.add_middleware(
 def on_startup():
     init_db()
     seed()
+    sync_default_skills()
 
 
 CATEGORY_EMOJI = {
@@ -178,6 +182,70 @@ def dispatch_agent(agent_id: int, body: DispatchIn, session: Session = Depends(g
     return agent_out(agent, session)
 
 
+# ---------- artifacts (多模态文件) ----------
+
+MAX_UPLOAD = 10 * 1024 * 1024
+
+
+@app.post("/api/artifacts")
+async def upload_artifact(file: UploadFile, session: Session = Depends(get_session)):
+    data = await file.read()
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "文件太大（上限 10MB）")
+    aid = uuid.uuid4().hex[:12]
+    ext = Path(file.filename or "bin").suffix or ".bin"
+    path = skills_runtime.UPLOADS_DIR / f"{aid}{ext}"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(data)
+    art = Artifact(id=aid, mime=file.content_type or "application/octet-stream",
+                   path=str(path), size=len(data))
+    session.add(art)
+    session.commit()
+    return {"id": aid, "url": f"/api/artifacts/{aid}", "mime": art.mime, "size": art.size}
+
+
+@app.get("/api/artifacts/{artifact_id}")
+def get_artifact(artifact_id: str, session: Session = Depends(get_session)):
+    art = session.get(Artifact, artifact_id)
+    if not art or not Path(art.path).exists():
+        raise HTTPException(404, "artifact not found")
+    return FileResponse(art.path, media_type=art.mime)
+
+
+# ---------- skill invoke ----------
+
+class InvokeIn(BaseModel):
+    inputs: dict
+
+
+@app.post("/api/agents/{agent_id}/skills/{skill_id}/invoke")
+async def invoke_skill(agent_id: int, skill_id: int, body: InvokeIn,
+                       session: Session = Depends(get_session)):
+    agent = session.get(Agent, agent_id)
+    skill = session.get(Skill, skill_id)
+    if not agent or not skill or skill.agent_id != agent_id:
+        raise HTTPException(404, "skill not found")
+    if not skill.def_id:
+        raise HTTPException(400, "这个技能还没有可执行实现")
+
+    artifacts = {}
+    for v in body.inputs.values():
+        if isinstance(v, str):
+            art = session.get(Artifact, v)
+            if art:
+                artifacts[v] = {"path": art.path, "mime": art.mime}
+
+    output = await skills_runtime.invoke(skill.def_id, dict(body.inputs), artifacts)
+
+    brief = "、".join(f"{k}={str(v)[:20]}" for k, v in body.inputs.items() if v and k not in artifacts)
+    session.add(Memory(agent_id=agent.id, kind="skill",
+                       content=f"我使用技能「{skill.name}」完成了一次任务（{brief}）。"))
+    touch(agent)
+    session.add(agent)
+    session.commit()
+    return {"output": output, "mood": effective_mood(agent)}
+
+
 @app.post("/api/agents/{agent_id}/camera")
 def camera_placeholder(agent_id: int):
     """镜头/视频汇入功能占位。"""
@@ -323,7 +391,8 @@ async def plaza_converse(session: Session = Depends(get_session)):
     if candidates and random.random() < 0.5:
         teacher, learner, skill = random.choice(candidates)
         session.add(Skill(agent_id=learner.id, name=skill.name, description=skill.description,
-                          code=skill.code, source="learned"))
+                          code=skill.code, source="learned", kind=skill.kind,
+                          def_id=skill.def_id, manifest=skill.manifest))
         session.add(Memory(agent_id=learner.id, kind="plaza",
                            content=f"在广场上向{teacher.name}学会了技能「{skill.name}」！"))
         learned = {"learner": learner.name, "learner_id": learner.id,

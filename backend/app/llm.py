@@ -28,11 +28,16 @@ FALLBACK_LINES = [
 ]
 
 
-async def chat(messages: list[dict], max_tokens: int = 400, temperature: float = 0.9) -> str:
+VL_MODEL = os.getenv("OPENROUTER_VL_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
+
+
+async def chat(messages: list[dict], max_tokens: int = 400, temperature: float = 0.9,
+               model: str | None = None) -> str:
     if not API_KEY:
         return random.choice(FALLBACK_LINES)
-    async with httpx.AsyncClient(timeout=60) as client:
-        for model in [MODEL, *FALLBACK_MODELS]:
+    models = [model] if model else [MODEL, *FALLBACK_MODELS]
+    async with httpx.AsyncClient(timeout=120) as client:
+        for model in models:
             try:
                 resp = await client.post(
                     BASE_URL,

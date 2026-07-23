@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { Camera, MapPin, Send, X } from 'lucide-react'
 import { api } from '../api'
 import { useStore } from '../store'
+import SkillRunner from './SkillRunner'
 import type { AgentDetail, Skill } from '../types'
 
 const KIND_LABEL: Record<string, string> = {
@@ -28,6 +29,7 @@ export default function AgentSheet({ agentId, onClose, onChanged }: Props) {
   const { user } = useStore()
   const [detail, setDetail] = useState<AgentDetail | null>(null)
   const [openSkill, setOpenSkill] = useState<Skill | null>(null)
+  const [runningSkill, setRunningSkill] = useState<Skill | null>(null)
   const [chatLog, setChatLog] = useState<{ who: 'me' | 'agent'; text: string }[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -129,20 +131,32 @@ export default function AgentSheet({ agentId, onClose, onChanged }: Props) {
                     <div className="mb-1 text-sm font-bold text-ink">技能 Skills</div>
                     <div className="flex flex-wrap gap-2">
                       {detail.skills.length === 0 && <span className="text-xs text-ink/50">还没有技能</span>}
-                      {detail.skills.map((s) => (
-                        <button
-                          key={s.id}
-                          className={`pixel-btn px-2 py-1 text-xs ${s.source === 'learned' ? 'bg-berry text-white' : 'bg-white text-ink'}`}
-                          onClick={() => setOpenSkill(openSkill?.id === s.id ? null : s)}
-                        >
-                          {s.source === 'learned' ? '✨' : '🔧'}{s.name}
-                        </button>
-                      ))}
+                      {detail.skills.map((s) => {
+                        const runnable = !!s.def_id
+                        return (
+                          <button
+                            key={s.id}
+                            className={`pixel-btn px-2 py-1 text-xs ${
+                              runnable ? 'bg-yellow-300 text-ink'
+                                : s.source === 'learned' ? 'bg-berry text-white' : 'bg-white text-ink'
+                            }`}
+                            onClick={() =>
+                              runnable && isMine
+                                ? setRunningSkill(s)
+                                : setOpenSkill(openSkill?.id === s.id ? null : s)}
+                          >
+                            {runnable ? '⚡' : s.source === 'learned' ? '✨' : '🔧'}{s.name}
+                          </button>
+                        )
+                      })}
                     </div>
                     {openSkill && (
                       <div className="pixel-border mt-2 bg-ink p-2 text-xs text-green-300">
                         <div className="mb-1 text-cream">{openSkill.description}</div>
                         <pre className="overflow-x-auto whitespace-pre-wrap">{openSkill.code}</pre>
+                        {!!openSkill.def_id && !isMine && (
+                          <div className="mt-1 text-yellow-300">⚡ 可执行技能——派你的伙伴来广场交流，有机会学会它！</div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -191,6 +205,15 @@ export default function AgentSheet({ agentId, onClose, onChanged }: Props) {
               </>
             )}
           </motion.div>
+          {runningSkill && detail && (
+            <SkillRunner
+              agentId={detail.id}
+              agentName={detail.name}
+              skill={runningSkill}
+              onClose={() => setRunningSkill(null)}
+              onDone={() => api.agent(detail.id).then(setDetail)}
+            />
+          )}
         </>
       )}
     </AnimatePresence>

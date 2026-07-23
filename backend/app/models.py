@@ -41,5 +41,16 @@ class Skill(SQLModel, table=True):
     name: str
     description: str = ""
     code: str = ""
-    source: str = "user"  # user | learned
+    source: str = "user"  # user | learned | default
+    kind: str = "demo"  # demo(装饰) | prompt | module
+    def_id: str = ""  # 指向 backend/skills/{def_id}/ 的可执行定义；空=无
+    manifest: str = ""  # skill.json 内容快照（inputs/output/cta），前端渲染表单用
+    created_at: datetime = Field(default_factory=now)
+
+
+class Artifact(SQLModel, table=True):
+    id: Optional[str] = Field(default=None, primary_key=True)
+    mime: str
+    path: str
+    size: int = 0
     created_at: datetime = Field(default_factory=now)

@@ -30,7 +30,29 @@ export interface Skill {
   name: string
   description: string
   code: string
-  source: 'user' | 'learned'
+  source: 'user' | 'learned' | 'default'
+  kind: 'demo' | 'prompt' | 'module'
+  def_id: string
+  manifest: string
+}
+
+export interface SkillInputSpec {
+  key: string
+  label: string
+  type: 'text' | 'select' | 'image' | 'date' | 'time'
+  required?: boolean
+  options?: string[]
+  default?: string
+  placeholder?: string
+}
+
+export interface SkillManifest {
+  def_id: string
+  name: string
+  emoji?: string
+  description: string
+  inputs: SkillInputSpec[]
+  cta?: string
 }
 
 export interface AgentDetail extends AgentSummary {

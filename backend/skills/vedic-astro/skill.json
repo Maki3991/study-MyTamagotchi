@@ -1,0 +1,17 @@
+{
+  "def_id": "vedic-astro",
+  "name": "吠陀占星",
+  "emoji": "🔮",
+  "description": "输入出生资料，按 KN Rao 体系风格生成占星解读（娱乐向）",
+  "kind": "prompt",
+  "source_repo": "https://github.com/CNWU16/vedic-astro-skills",
+  "inputs": [
+    { "key": "birth_date", "label": "出生日期", "type": "date", "required": true },
+    { "key": "birth_time", "label": "出生时间", "type": "time", "required": true },
+    { "key": "birth_place", "label": "出生地点", "type": "text", "required": true, "placeholder": "如：杭州" },
+    { "key": "focus", "label": "想看什么", "type": "select", "options": ["综合运势", "事业方向", "感情姻缘"], "default": "综合运势" },
+    { "key": "question", "label": "具体问题（可选）", "type": "text", "placeholder": "如：明年适合换工作吗" }
+  ],
+  "output": { "type": "markdown" },
+  "cta": "开始解读"
+}

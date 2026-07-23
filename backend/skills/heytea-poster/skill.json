@@ -1,0 +1,15 @@
+{
+  "def_id": "heytea-poster",
+  "name": "喜茶风海报",
+  "emoji": "🧋",
+  "description": "把一张生活照片变成喜茶风简笔画海报概念：真实物品锚点 + 黑线小人 + 歪扭儿童字",
+  "kind": "module",
+  "source_repo": "https://github.com/Hchen1218/heytea-style",
+  "inputs": [
+    { "key": "photo", "label": "生活照片", "type": "image", "required": true },
+    { "key": "template", "label": "模板", "type": "select", "options": ["两套都出（推荐）", "带字版", "无字版"], "default": "两套都出（推荐）" },
+    { "key": "title", "label": "标题文案（可选）", "type": "text", "placeholder": "不填由我来想" }
+  ],
+  "output": { "type": "markdown" },
+  "cta": "生成海报概念"
+}

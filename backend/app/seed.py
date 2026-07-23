@@ -1,7 +1,32 @@
+import json
+
 from sqlmodel import Session, select
 
 from .db import engine
 from .models import Agent, Memory, Skill, User
+from .skills_runtime import load_defs
+
+
+def _default_skill(agent_id: int, def_id: str) -> Skill:
+    d = load_defs()[def_id]
+    manifest = json.dumps({k: v for k, v in d.items() if k != "_dir"}, ensure_ascii=False)
+    return Skill(agent_id=agent_id, name=d["name"], description=d["description"],
+                 code=f"# 可执行技能：{def_id}\n# 来源：{d.get('source_repo', '')}",
+                 source="default", kind=d["kind"], def_id=def_id, manifest=manifest)
+
+
+def sync_default_skills() -> None:
+    """启动时把 skill 定义的最新 manifest 同步进已存在的 skill 行。"""
+    defs = load_defs()
+    with Session(engine) as session:
+        rows = session.exec(select(Skill).where(Skill.def_id != "")).all()
+        for row in rows:
+            d = defs.get(row.def_id)
+            if d:
+                row.manifest = json.dumps({k: v for k, v in d.items() if k != "_dir"},
+                                          ensure_ascii=False)
+                session.add(row)
+        session.commit()
 
 
 def seed() -> None:
@@ -49,5 +74,7 @@ def seed() -> None:
                   code="def replay(clips):\n    return sorted(clips, key=lambda c: c.score)[-3:]", source="user"),
             Skill(agent_id=pen.id, name="金句摘抄", description="把好句子誊写收藏",
                   code="def collect(sentence):\n    return f'『{sentence}』—— 已收藏'", source="user"),
+            _default_skill(cam.id, "heytea-poster"),
+            _default_skill(book.id, "vedic-astro"),
         ])
         session.commit()

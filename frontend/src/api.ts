@@ -43,6 +43,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ user_id: userId }),
     }),
+  uploadArtifact: async (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/artifacts', { method: 'POST', body: fd })
+    if (!res.ok) throw new Error('上传失败')
+    return res.json() as Promise<{ id: string; url: string; mime: string }>
+  },
+  invokeSkill: (agentId: number, skillId: number, inputs: Record<string, string>) =>
+    req<{ output: string; mood: number }>(`/agents/${agentId}/skills/${skillId}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
+    }),
   plaza: () => req<AgentSummary[]>('/plaza'),
   plazaConverse: () => req<ConverseResult>('/plaza/converse', { method: 'POST' }),
 }
