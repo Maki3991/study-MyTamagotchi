@@ -29,6 +29,36 @@ FALLBACK_LINES = [
 
 
 VL_MODEL = os.getenv("OPENROUTER_VL_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")
+IMG_MODEL = os.getenv("OPENROUTER_IMG_MODEL", "google/gemini-3.1-flash-lite-image")
+
+
+async def generate_image(prompt: str, image_data_url: str | None = None) -> str | None:
+    """生成图片，返回 data:image/...;base64,... 或 None。可传参考图做 image-to-image。"""
+    if not API_KEY:
+        return None
+    content: list[dict] = [{"type": "text", "text": prompt}]
+    if image_data_url:
+        content.append({"type": "image_url", "image_url": {"url": image_data_url}})
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            resp = await client.post(
+                BASE_URL,
+                headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": IMG_MODEL,
+                    "modalities": ["image", "text"],
+                    "messages": [{"role": "user", "content": content}],
+                    "max_tokens": 4000,
+                },
+            )
+            resp.raise_for_status()
+            msg = resp.json()["choices"][0]["message"]
+            images = msg.get("images") or []
+            if images:
+                return images[0]["image_url"]["url"]
+    except Exception:
+        pass
+    return None
 
 
 async def chat(messages: list[dict], max_tokens: int = 400, temperature: float = 0.9,
@@ -63,9 +93,11 @@ async def chat(messages: list[dict], max_tokens: int = 400, temperature: float =
     return random.choice(FALLBACK_LINES)
 
 
-async def chat_json(messages: list[dict], max_tokens: int = 600) -> dict | list | None:
-    """Ask for JSON output and parse it; returns None on failure."""
-    raw = await chat(messages, max_tokens=max_tokens, temperature=0.7)
+# 免费模型长 JSON 输出偶尔崩坏，最后兜底用便宜的付费文字模型保证可解析
+JSON_RESCUE_MODEL = os.getenv("OPENROUTER_JSON_RESCUE_MODEL", "google/gemini-3.1-flash-lite")
+
+
+def _parse_json(raw: str) -> dict | list | None:
     text = raw.strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -79,3 +111,13 @@ async def chat_json(messages: list[dict], max_tokens: int = 600) -> dict | list 
         return json.loads(text[start : end + 1])
     except Exception:
         return None
+
+
+async def chat_json(messages: list[dict], max_tokens: int = 600) -> dict | list | None:
+    """Ask for JSON output and parse it; retries down the model chain until it parses."""
+    for model in [MODEL, *FALLBACK_MODELS, JSON_RESCUE_MODEL]:
+        raw = await chat(messages, max_tokens=max_tokens, temperature=0.7, model=model)
+        parsed = _parse_json(raw)
+        if parsed is not None:
+            return parsed
+    return None

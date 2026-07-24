@@ -235,7 +235,17 @@ async def invoke_skill(agent_id: int, skill_id: int, body: InvokeIn,
             if art:
                 artifacts[v] = {"path": art.path, "mime": art.mime}
 
-    output = await skills_runtime.invoke(skill.def_id, dict(body.inputs), artifacts)
+    def save_artifact(data: bytes, mime: str) -> str:
+        aid = uuid.uuid4().hex[:12]
+        ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}.get(mime, ".bin")
+        path = skills_runtime.UPLOADS_DIR / f"{aid}{ext}"
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(data)
+        session.add(Artifact(id=aid, mime=mime, path=str(path), size=len(data)))
+        session.commit()
+        return f"/api/artifacts/{aid}"
+
+    output = await skills_runtime.invoke(skill.def_id, dict(body.inputs), artifacts, save_artifact)
 
     brief = "、".join(f"{k}={str(v)[:20]}" for k, v in body.inputs.items() if v and k not in artifacts)
     session.add(Memory(agent_id=agent.id, kind="skill",

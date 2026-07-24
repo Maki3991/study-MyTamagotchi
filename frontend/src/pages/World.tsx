@@ -22,7 +22,11 @@ export default function World() {
     timers.current.forEach(clearTimeout)
     timers.current = []
   }
-  useEffect(() => clearTimers, [])
+  useEffect(() => {
+    refreshAgents()
+    return clearTimers
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const showBubble = (agentId: number, text: string, ms = 6000) => {
     setBubbles((b) => ({ ...b, [agentId]: text }))

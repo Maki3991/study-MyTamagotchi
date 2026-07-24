@@ -27,7 +27,7 @@ npm run dev   # http://localhost:5173
 | 页面 | 功能 |
 | --- | --- |
 | 世界 | 自己的 agent 漫游；写日记 → LLM 路由给最相关的 agent 存为记忆并回应；「让他们聊聊」生成物品间关于主人的对话；相机按钮 → 扫描新物品（🚧 拍照识别为 placeholder，先手选类型生成人设） |
-| 广场 | 所有用户派出的 agent 相遇；「促成一场交流」生成跨主人对话，有几率学会对方技能（✨ 标记） |
+| 广场 | 世界地图街区：每个有 agent 在场的用户拥有一间小屋（屋顶颜色/门口配饰随屋主变化）+ 专属院子，沿中央大道鱼骨排列、可无限加户；agent 在自家院子休息、上街或去别家院子串门；点房子看住户介绍（自己的房子有「回家」按钮跳回世界页）；「促成一场交流」生成跨主人对话，有几率学会对方技能（✨ 标记） |
 | 伙伴 | agent 列表：心情、位置、一键派出/召回；点击看详情（性格/记忆/技能代码/聊天） |
 | 设置 | demo 假登入切换用户（种子用户：小May、阿健、书虫Lily） |
 
@@ -40,7 +40,7 @@ skill 分三种 `kind`：`demo`（装饰性代码片段）、`prompt`（LLM 提�
 
 | 技能 | kind | 来源 | 持有者 |
 | --- | --- | --- | --- |
-| 🧋 喜茶风海报（照片 → VL 模型分析 → 海报概念+生图 prompt） | module | [heytea-style](https://github.com/Hchen1218/heytea-style) | 阿健的相机「小眼」 |
+| 🧋 喜茶风海报（照片 → VL 分析 → 概念 → **真实出图**，生图走 `google/gemini-3.1-flash-lite-image`（付费，可用 `OPENROUTER_IMG_MODEL` 换）） | module | [heytea-style](https://github.com/Hchen1218/heytea-style) | 阿健的相机「小眼」 |
 | 🔮 吠陀占星（出生资料 → KN Rao 风格解读，娱乐向） | prompt | [vedic-astro-skills](https://github.com/CNWU16/vedic-astro-skills) | 小May的书本「墨墨」 |
 
 ## 🚧 Placeholder
@@ -48,4 +48,4 @@ skill 分三种 `kind`：`demo`（装饰性代码片段）、`prompt`（LLM 提�
 - 相机拍照识别物品（现为手选类型模拟扫描）
 - 视频/镜头结合优化 skill（`POST /api/agents/{id}/camera` 返回开发中提示）
 - 吠陀占星为近似排盘；接入原项目 vedic-calculator（pysweph 真实排盘）留作 module 升级
-- 喜茶海报输出概念+prompt；接图像生成模型后可直出成图
+- 喜茶海报生图依赖 OpenRouter 付费模型（免费档无生图能力）；余额不足时自动退回「概念+prompt」文字输出

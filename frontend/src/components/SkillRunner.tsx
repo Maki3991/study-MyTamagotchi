@@ -15,6 +15,14 @@ function Md({ text }: { text: string }) {
         if (line.startsWith('## ')) {
           return <div key={i} className="mt-2 border-b-2 border-ink/20 pb-0.5 text-sm font-bold">{line.slice(3)}</div>
         }
+        const img = line.match(/^!\[(.*?)\]\((.+?)\)$/)
+        if (img) {
+          return (
+            <a key={i} href={img[2]} target="_blank" rel="noreferrer">
+              <img src={img[2]} alt={img[1]} className="pixel-border my-1 w-full bg-white" style={{ imageRendering: 'auto' }} />
+            </a>
+          )
+        }
         if (line.startsWith('- ')) {
           return <div key={i} className="pl-2">▸ {bold(line.slice(2))}</div>
         }
