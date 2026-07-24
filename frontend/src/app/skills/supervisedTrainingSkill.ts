@@ -59,7 +59,7 @@ export const SUPERVISED_TRAINING_EXERCISES: {
   { id: "jumping_jacks", label: "开合跳" },
 ];
 
-const DEFAULT_TRAINING_API = "http://127.0.0.1:4000";
+const DEFAULT_TRAINING_API = import.meta.env.VITE_SUPERVISED_TRAINING_API_URL || "http://127.0.0.1:4000";
 
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json();

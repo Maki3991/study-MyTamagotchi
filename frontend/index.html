@@ -1,21 +1,201 @@
 
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Agent 世界 · ForkWorld</title>
+    <meta name="description" content="让你的物件成为会生活、学习和彼此串门的智能体。" />
+    <meta name="theme-color" content="#FAF6EF" />
+    <meta name="color-scheme" content="light" />
+    <meta name="format-detection" content="telephone=no" />
 
-      <meta charset="UTF-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Develop ForkWorld Visual Direction</title>
-      <meta name="description" content="Transform cherished real-world objects into autonomous agents that live and interact in a customizable hand-drawn isometric city, preserving memories and privacy." />
-      <meta name="robots" content="noindex, nofollow" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-120.png" />
 
-    </head>
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Agent 世界" />
 
-    <body>
+    <style>
+      @font-face {
+        font-family: "Fusion Pixel 10px Monospaced SC";
+        src: url("/fonts/fusion-pixel-sc.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+      }
+      html, body { height: 100%; margin: 0; background: #FAF6EF; }
+      #root { height: 100%; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+      }
+      input, textarea, select { font-size: 16px; }
 
-      <div id="root"></div>
-      <script type="module" src="/src/main.tsx"></script>
-
-    </body>
-  </html>
+      #agentland-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background: #FAF6EF;
+        color: #1C1911;
+        opacity: 1;
+        transition: opacity 360ms steps(6, end), visibility 360ms linear;
+      }
+      #agentland-splash::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        opacity: .24;
+        background-image:
+          linear-gradient(#B67C4212 1px, transparent 1px),
+          linear-gradient(90deg, #B67C4212 1px, transparent 1px);
+        background-size: 20px 20px;
+        mask-image: radial-gradient(circle at center, black, transparent 74%);
+      }
+      #agentland-splash.is-leaving {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      .agentland-splash-content {
+        position: relative;
+        width: min(82vw, 340px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      .agentland-dotti-stage {
+        position: relative;
+        width: min(72vw, 300px);
+        height: 170px;
+        display: grid;
+        place-items: center;
+      }
+      .agentland-dotti {
+        width: min(68vw, 276px);
+        height: auto;
+        image-rendering: auto;
+        transform-origin: 50% 90%;
+        animation:
+          agentland-dotti-enter 860ms steps(8, end) both,
+          agentland-dotti-idle 900ms steps(2, end) 900ms infinite;
+      }
+      .agentland-dotti-shadow {
+        position: absolute;
+        left: 18%;
+        right: 18%;
+        bottom: 12px;
+        height: 14px;
+        border-radius: 50%;
+        background: #1C1911;
+        opacity: .12;
+        animation: agentland-shadow 900ms steps(2, end) 900ms infinite;
+      }
+      .agentland-brand,
+      .agentland-brand-cn,
+      .agentland-connection {
+        font-family: "Fusion Pixel 10px Monospaced SC", monospace;
+        font-weight: 400;
+      }
+      .agentland-brand {
+        margin: 16px 0 0;
+        font-size: clamp(30px, 9vw, 42px);
+        line-height: 1;
+        letter-spacing: .06em;
+        animation: agentland-copy-in 520ms steps(7, end) 620ms both;
+      }
+      .agentland-brand-cn {
+        margin: 14px 0 0;
+        font-size: clamp(15px, 4.8vw, 20px);
+        letter-spacing: .12em;
+        color: #625D54;
+        animation: agentland-copy-in 520ms steps(7, end) 760ms both;
+      }
+      .agentland-connection {
+        min-height: 24px;
+        margin-top: 34px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: #8E867A;
+        font-size: 11px;
+        letter-spacing: .08em;
+        animation: agentland-copy-in 400ms steps(5, end) 900ms both;
+      }
+      .agentland-connection-dot {
+        width: 7px;
+        height: 7px;
+        background: #6B9E7A;
+        box-shadow: 11px 0 #6B9E7A66, 22px 0 #6B9E7A33;
+        animation: agentland-dots 900ms steps(3, end) infinite;
+      }
+      @keyframes agentland-dotti-enter {
+        0% { transform: translateX(-110vw) translateY(8px) rotate(-3deg); }
+        72% { transform: translateX(12px) translateY(-4px) rotate(2deg); }
+        100% { transform: translateX(0) translateY(0) rotate(0); }
+      }
+      @keyframes agentland-dotti-idle {
+        0%, 100% { transform: translateY(0) rotate(0); }
+        50% { transform: translateY(-7px) rotate(-1deg); }
+      }
+      @keyframes agentland-shadow {
+        0%, 100% { transform: scaleX(1); opacity: .12; }
+        50% { transform: scaleX(.86); opacity: .08; }
+      }
+      @keyframes agentland-copy-in {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes agentland-dots {
+        0% { opacity: .35; }
+        50% { opacity: 1; }
+        100% { opacity: .55; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .agentland-dotti,
+        .agentland-dotti-shadow,
+        .agentland-brand,
+        .agentland-brand-cn,
+        .agentland-connection {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="agentland-splash" role="status" aria-label="Agent Land 正在连接">
+      <div class="agentland-splash-content">
+        <div class="agentland-dotti-stage">
+          <div class="agentland-dotti-shadow"></div>
+          <img class="agentland-dotti" src="/icons/dotti-splash.png" alt="" />
+        </div>
+        <p class="agentland-brand">Agent Land</p>
+        <p class="agentland-brand-cn">我的智能体世界</p>
+        <div class="agentland-connection">
+          <span class="agentland-connection-dot"></span>
+          <span id="agentland-connection-label">正在连接智能体世界</span>
+        </div>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.setTimeout(function () {
+        var splash = document.getElementById("agentland-splash");
+        if (splash) splash.classList.add("is-leaving");
+      }, 8000);
+    </script>
+  </body>
+</html>
