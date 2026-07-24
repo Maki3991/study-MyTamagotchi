@@ -37,9 +37,110 @@ export type SupervisedTrainingSummary = {
 };
 
 export interface SupervisedTrainingProvider {
+  health(): Promise<boolean>;
   start(exercise: SupervisedTrainingExercise): Promise<{ sessionId: string }>;
   analyze(frame: SupervisedTrainingFrame): Promise<SupervisedTrainingFeedback>;
   stop(sessionId: string): Promise<SupervisedTrainingSummary>;
+}
+
+export const SUPERVISED_TRAINING_EXERCISES: {
+  id: SupervisedTrainingExercise;
+  label: string;
+}[] = [
+  { id: "squats", label: "深蹲" },
+  { id: "lunges", label: "弓步蹲" },
+  { id: "pushups", label: "俯卧撑" },
+  { id: "dumbbell_shoulder_press", label: "哑铃肩推" },
+  { id: "dumbbell_rows", label: "哑铃划船" },
+  { id: "bicep_curls", label: "二头弯举" },
+  { id: "situps", label: "仰卧起坐" },
+  { id: "tricep_extensions", label: "肱三头屈伸" },
+  { id: "lateral_shoulder_raises", label: "侧平举" },
+  { id: "jumping_jacks", label: "开合跳" },
+];
+
+const DEFAULT_TRAINING_API = "http://127.0.0.1:4000";
+
+async function readJson<T>(response: Response): Promise<T> {
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload?.error || `监督训练服务返回 ${response.status}`);
+  }
+  return payload as T;
+}
+
+export function createSupervisedTrainingProvider(baseUrl = DEFAULT_TRAINING_API): SupervisedTrainingProvider {
+  const api = baseUrl.replace(/\/$/, "");
+  return {
+    async health() {
+      try {
+        const response = await fetch(`${api}/`, { method: "GET" });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+
+    async start(exercise) {
+      const payload = await readJson<{ session_id: string }>(await fetch(`${api}/api/session/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exercise, mode: "manual" }),
+      }));
+      return { sessionId: payload.session_id };
+    },
+
+    async analyze(frame) {
+      const payload = await readJson<{
+        phase: string;
+        rep_count: number;
+        status_color: SupervisedTrainingFeedback["statusColor"];
+        primary_cue: string;
+        secondary_cue?: string;
+        speak_text?: string;
+        errors?: SupervisedTrainingFeedback["errors"];
+      }>(await fetch(`${api}/api/session/frame`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: frame.sessionId,
+          exercise: frame.exercise,
+          image_data: frame.imageData,
+          mode: "manual",
+        }),
+      }));
+      return {
+        phase: payload.phase,
+        repCount: payload.rep_count,
+        statusColor: payload.status_color,
+        primaryCue: payload.primary_cue,
+        secondaryCue: payload.secondary_cue,
+        speakText: payload.speak_text,
+        errors: payload.errors || [],
+      };
+    },
+
+    async stop(sessionId) {
+      const payload = await readJson<{ summary: {
+        exercise: SupervisedTrainingExercise;
+        rep_count: number;
+        duration_seconds: number;
+        top_mistakes: SupervisedTrainingSummary["topMistakes"];
+        next_focus: string;
+      } }>(await fetch(`${api}/api/session/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      }));
+      return {
+        exercise: payload.summary.exercise,
+        repCount: payload.summary.rep_count,
+        durationSeconds: payload.summary.duration_seconds,
+        topMistakes: payload.summary.top_mistakes,
+        nextFocus: payload.summary.next_focus,
+      };
+    },
+  };
 }
 
 export const SUPERVISED_TRAINING_CONTRACT = {

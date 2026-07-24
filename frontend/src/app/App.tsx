@@ -39,6 +39,13 @@ import {
   type SkillForgeManifest,
   type SkillForgeTraceEvent,
 } from "./skillForgeHarness";
+import {
+  SUPERVISED_TRAINING_EXERCISES,
+  createSupervisedTrainingProvider,
+  type SupervisedTrainingExercise,
+  type SupervisedTrainingFeedback,
+  type SupervisedTrainingSummary,
+} from "./skills/supervisedTrainingSkill";
 import medCottagePng from "../assets/world/medieval/cottage.png";
 import medChapelPng from "../assets/world/medieval/chapel.png";
 import medWatchtowerPng from "../assets/world/medieval/watchtower.png";
@@ -992,6 +999,7 @@ type AgentEditorDraft = {
 };
 
 const AGENT_EDITOR_STORAGE_KEY = "forkworld-existing-agent-settings-v1";
+const AGENT_SKILL_LOADOUT_STORAGE_KEY = "forkworld-agent-skill-loadouts-v1";
 
 const AGENT_ROLE_ZH: Record<string, string> = {
   "Café Keeper": "咖啡馆管理员",
@@ -6608,10 +6616,252 @@ function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; 
   );
 }
 
+function SupervisedTrainingConsole() {
+  const provider = useMemo(() => createSupervisedTrainingProvider(), []);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const startAttemptRef = useRef(0);
+  const [exercise, setExercise] = useState<SupervisedTrainingExercise>("squats");
+  const [engineStatus, setEngineStatus] = useState<"checking" | "ready" | "offline">("checking");
+  const [starting, setStarting] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<SupervisedTrainingFeedback | null>(null);
+  const [summary, setSummary] = useState<SupervisedTrainingSummary | null>(null);
+  const [error, setError] = useState("");
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  const checkEngine = async () => {
+    setEngineStatus("checking");
+    const available = await provider.health();
+    setEngineStatus(available ? "ready" : "offline");
+    return available;
+  };
+
+  useEffect(() => {
+    checkEngine();
+    return () => {
+      startAttemptRef.current += 1;
+      stopCamera();
+      const activeSession = sessionIdRef.current;
+      sessionIdRef.current = null;
+      if (activeSession) provider.stop(activeSession).catch(() => undefined);
+    };
+  }, [provider]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    let timer = 0;
+    const tick = async () => {
+      if (cancelled) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (video && canvas && video.readyState >= 2) {
+        const width = 480;
+        const height = Math.max(270, Math.round(width * (video.videoHeight || 360) / (video.videoWidth || 480)));
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")?.drawImage(video, 0, 0, width, height);
+        try {
+          const nextFeedback = await provider.analyze({
+            sessionId,
+            exercise,
+            imageData: canvas.toDataURL("image/jpeg", .72),
+          });
+          if (!cancelled) {
+            setFeedback(nextFeedback);
+            setError("");
+          }
+        } catch (reason) {
+          if (!cancelled) setError(reason instanceof Error ? reason.message : "训练帧分析失败");
+        }
+      }
+      if (!cancelled) timer = window.setTimeout(tick, 700);
+    };
+    timer = window.setTimeout(tick, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [exercise, provider, sessionId]);
+
+  const startTraining = async () => {
+    const attempt = startAttemptRef.current + 1;
+    startAttemptRef.current = attempt;
+    setStarting(true);
+    setError("");
+    setSummary(null);
+    setFeedback(null);
+    try {
+      const available = engineStatus === "ready" || await checkEngine();
+      if (!available) throw new Error("练了吗模型服务未启动，请先启动本地训练引擎");
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("当前环境无法访问摄像头");
+      let cameraAbandoned = false;
+      let permissionTimer = 0;
+      const cameraRequest = navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      cameraRequest.then(stream => {
+        if (cameraAbandoned) stream.getTracks().forEach(track => track.stop());
+      }).catch(() => undefined);
+      const permissionTimeout = new Promise<never>((_, reject) => {
+        permissionTimer = window.setTimeout(() => {
+          cameraAbandoned = true;
+          reject(new Error("等待摄像头授权超时，请在浏览器地址栏允许摄像头后重试"));
+        }, 15000);
+      });
+      const stream = await Promise.race([cameraRequest, permissionTimeout])
+        .finally(() => window.clearTimeout(permissionTimer));
+      if (attempt !== startAttemptRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      const session = await provider.start(exercise);
+      if (attempt !== startAttemptRef.current) {
+        await provider.stop(session.sessionId).catch(() => undefined);
+        stopCamera();
+        return;
+      }
+      sessionIdRef.current = session.sessionId;
+      setSessionId(session.sessionId);
+    } catch (reason) {
+      stopCamera();
+      if (attempt === startAttemptRef.current) {
+        setError(reason instanceof Error ? reason.message : "无法启动监督训练");
+      }
+    } finally {
+      if (attempt === startAttemptRef.current) setStarting(false);
+    }
+  };
+
+  const stopTraining = async () => {
+    const activeSession = sessionIdRef.current;
+    sessionIdRef.current = null;
+    setSessionId(null);
+    stopCamera();
+    if (!activeSession) return;
+    try {
+      setSummary(await provider.stop(activeSession));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法生成训练总结");
+    }
+  };
+
+  const statusColor = sessionId ? "#E8634A" : engineStatus === "ready" ? "#6B9E7A" : "#8E867A";
+  return (
+    <section className="rounded-2xl overflow-hidden" style={{ border: "2px solid #B67C4270", background: "#F7F0E5" }}>
+      <div className="px-3 py-2.5 flex items-center justify-between gap-3" style={{ background: "#B67C4212", borderBottom: "1px solid #B67C4228" }}>
+        <div>
+          <p style={{ color: "#B67C42", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>DOTTI RUNTIME · REAL SKILL</p>
+          <p style={{ fontSize: "var(--ui-font-body)", marginTop: 4 }}>{sessionId ? "监督训练进行中" : "本地监督训练控制台"}</p>
+        </div>
+        <span className="flex items-center gap-1 rounded-full px-2 py-1" style={{ color: statusColor, background: `${statusColor}12`, fontSize: "var(--ui-font-micro)" }}>
+          <span className={sessionId ? "w-1.5 h-1.5 rounded-full animate-pulse" : "w-1.5 h-1.5 rounded-full"} style={{ background: statusColor }}/>
+          {sessionId ? "LIVE" : starting ? "等待授权" : engineStatus === "checking" ? "检测中" : engineStatus === "ready" ? "引擎在线" : "引擎离线"}
+        </span>
+      </div>
+
+      <div className="p-3 flex flex-col gap-3">
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="relative">
+            <select
+              aria-label="选择监督训练动作"
+              value={exercise}
+              disabled={Boolean(sessionId) || starting}
+              onChange={event => setExercise(event.target.value as SupervisedTrainingExercise)}
+              className="w-full rounded-xl"
+              style={{
+                height: 36, appearance: "none", WebkitAppearance: "none", padding: "0 30px 0 10px",
+                border: "1.5px solid #B67C4245", background: "#FAF6EF", color: "#1C1911",
+                fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-caption)",
+              }}
+            >
+              {SUPERVISED_TRAINING_EXERCISES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+            <ChevronDown size={12} style={{ position: "absolute", right: 10, top: 12, color: "#B67C42", pointerEvents: "none" }}/>
+          </div>
+          <button
+            type="button"
+            onClick={sessionId ? stopTraining : startTraining}
+            disabled={starting}
+            className="rounded-xl px-3"
+            style={{ minWidth: 92, background: sessionId ? "#E8634A" : "#B67C42", color: "white", opacity: starting ? .65 : 1, fontSize: "var(--ui-font-caption)" }}
+          >
+            {sessionId ? "结束并总结" : starting ? "等待授权…" : "启动监督训练"}
+          </button>
+        </div>
+
+        <div className="relative rounded-xl overflow-hidden" style={{ minHeight: 154, background: "#1C1911" }}>
+          <video ref={videoRef} muted playsInline style={{ width: "100%", height: 190, objectFit: "cover", display: sessionId ? "block" : "none", transform: "scaleX(-1)" }}/>
+          <canvas ref={canvasRef} hidden/>
+          {!sessionId && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-5">
+              <img src={petDachshundPng} alt="" style={{ width: 88, height: 64, objectFit: "contain" }}/>
+              <p style={{ color: "#FAF6EF", fontSize: "var(--ui-font-caption)", marginTop: 6 }}>
+                {starting ? "请允许浏览器使用摄像头，Dotti 正在准备训练。" : "选择动作后，Dotti 将调用真实姿态引擎监督训练。"}
+              </p>
+            </div>
+          )}
+          {sessionId && (
+            <div className="absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+              <span className="rounded-lg px-2 py-1" style={{ background: "rgba(28,25,17,.8)", color: "#FAF6EF", fontSize: "var(--ui-font-micro)" }}>
+                {feedback?.phase || "READY"}
+              </span>
+              <span className="rounded-lg px-2 py-1" style={{ background: "rgba(28,25,17,.8)", color: "#FAF6EF", fontSize: "var(--ui-font-micro)" }}>
+                REP {feedback?.repCount || 0}
+              </span>
+            </div>
+          )}
+          {sessionId && feedback?.primaryCue && (
+            <p className="absolute inset-x-2 bottom-2 rounded-xl px-2.5 py-2 text-center"
+              style={{ background: "rgba(250,246,239,.94)", color: "#1C1911", fontSize: "var(--ui-font-caption)", lineHeight: 1.5 }}>
+              Dotti：{feedback.primaryCue}
+            </p>
+          )}
+        </div>
+
+        {error && <p style={{ color: "#E8634A", fontSize: "var(--ui-font-caption)", lineHeight: 1.5 }}>{error}</p>}
+        {summary && (
+          <div className="rounded-xl p-3" style={{ background: "#FAF6EF", border: "1px solid #B67C4235" }}>
+            <div className="flex items-center justify-between">
+              <span style={{ color: "#B67C42", fontSize: "var(--ui-font-micro)" }}>TRAINING SUMMARY</span>
+              <span style={{ color: "#1C1911", fontSize: "var(--ui-font-label)" }}>{summary.repCount} 次</span>
+            </div>
+            <p style={{ color: "#625D54", fontSize: "var(--ui-font-caption)", marginTop: 7 }}>时长 {summary.durationSeconds}s · 下一组重点：{summary.nextFocus}</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
   const { world, error } = useWorldEvolution(4000);
   const [selectedAgentId, setSelectedAgentId] = useState("dotti");
   const [openManualSkillId, setOpenManualSkillId] = useState<string | null>(null);
+  const [skillLoadouts, setSkillLoadouts] = useState<Record<string, string[]>>(() => {
+    try {
+      return {
+        ...MY_AGENT_SKILL_LOADOUTS,
+        ...JSON.parse(window.localStorage.getItem(AGENT_SKILL_LOADOUT_STORAGE_KEY) || "{}"),
+      };
+    } catch {
+      return { ...MY_AGENT_SKILL_LOADOUTS };
+    }
+  });
   const growthAgents = [
     {
       id: "dotti",
@@ -6680,10 +6930,32 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
   const masteredSkills = skillBindings.filter(binding => binding.state === "mastered");
   const learningSkills = skillBindings.filter(binding => binding.state === "learning");
   const openManualSkill = openManualSkillId ? getPlazaSkill(openManualSkillId) : undefined;
+  const openManualLoaded = openManualSkill ? skillLoadouts[selected.id]?.includes(openManualSkill.id) ?? false : false;
+  const loadedSkillCount = skillBindings.filter(binding => skillLoadouts[selected.id]?.includes(binding.skillId)).length;
   const personalityVersion = runtimeAgent?.personalityVersion || Math.max(2, Math.round(selected.level / 3));
   const memoryCount = runtimeAgent?.memories.length || selected.memories;
   const relationships = runtimeAgent ? Object.keys(runtimeAgent.relationships).length : 4;
-  const evolutionProgress = Math.min(96, 38 + personalityVersion * 8 + masteredSkills.length * 9);
+  const evolutionProgress = Math.min(96, 38 + personalityVersion * 8 + loadedSkillCount * 9);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AGENT_SKILL_LOADOUT_STORAGE_KEY, JSON.stringify(skillLoadouts));
+    } catch {
+      // Skill loading still works for the current session when storage is unavailable.
+    }
+  }, [skillLoadouts]);
+
+  const toggleSkillLoad = (agentId: string, skillId: string) => {
+    setSkillLoadouts(current => {
+      const loaded = current[agentId] || [];
+      return {
+        ...current,
+        [agentId]: loaded.includes(skillId)
+          ? loaded.filter(id => id !== skillId)
+          : [...loaded, skillId],
+      };
+    });
+  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto"
@@ -6801,7 +7073,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
               {[
                 ["MEMORY", memoryCount, "段长期记忆"],
                 ["BONDS", relationships, "个稳定关系"],
-                ["SKILLS", skillBindings.length, "个能力绑定"],
+                ["SKILLS", loadedSkillCount, "个能力绑定"],
               ].map(([label, value, note], index) => (
                 <div key={label} className="py-2.5 text-center" style={{ borderRight: index < 2 ? "1px solid rgba(28,25,17,.08)" : "none" }}>
                   <p style={{ color: selected.color, fontSize: "var(--ui-font-label)" }}>{value}</p>
@@ -6815,7 +7087,9 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
             <div className="flex items-center justify-between mb-2">
               <div>
                 <p style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>SKILL DECK</p>
-                <p style={{ fontSize: "var(--ui-font-label)", marginTop: 4 }}>已加载到 {selected.name} 的能力卡</p>
+                <p style={{ fontSize: "var(--ui-font-label)", marginTop: 4 }}>
+                  {loadedSkillCount ? `已加载到 ${selected.name} 的能力卡` : `${selected.name} 的可用能力卡`}
+                </p>
               </div>
               <span style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)" }}>独立加载 · 可升级 · 可回滚</span>
             </div>
@@ -6823,6 +7097,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
               {masteredSkills.map(binding => {
                 const skill = getPlazaSkill(binding.skillId);
                 if (!skill) return null;
+                const loaded = skillLoadouts[selected.id]?.includes(skill.id) ?? false;
                 return (
                   <button
                     key={skill.id}
@@ -6832,16 +7107,18 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
                     className={`${skill.featured ? "col-span-2" : ""} rounded-2xl p-3 text-left`}
                     style={{
                       background: skill.featured
-                        ? `linear-gradient(135deg,${skill.color}22,#FAF6EF 58%,${skill.color}0D)`
+                        ? loaded
+                          ? `linear-gradient(135deg,${skill.color}22,#FAF6EF 58%,${skill.color}0D)`
+                          : "#FAF6EF"
                         : `${skill.color}10`,
-                      border: `${skill.featured ? 2 : 1.5}px solid ${skill.color}${skill.featured ? "90" : "45"}`,
-                      boxShadow: skill.featured ? `0 8px 22px ${skill.color}18` : undefined,
+                      border: `${skill.featured ? 2 : 1.5}px ${loaded ? "solid" : "dashed"} ${skill.color}${skill.featured ? "90" : "45"}`,
+                      boxShadow: skill.featured && loaded ? `0 8px 22px ${skill.color}18` : undefined,
                     }}
                   >
                     <div className="flex items-center justify-between">
                       <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${skill.color}18`, color: skill.color }}><Check size={13}/></span>
                       <span style={{ color: skill.color, fontSize: "var(--ui-font-micro)" }}>
-                        {skill.featured ? "CORE SKILL · " : "MASTERED · "}{binding.proficiency}
+                        {skill.featured ? "CORE SKILL · " : "MASTERED · "}{loaded ? binding.proficiency : "可加载"}
                       </span>
                     </div>
                     <p style={{ fontSize: skill.featured ? "var(--ui-font-heading)" : "var(--ui-font-label)", marginTop: 9 }}>{skill.name}</p>
@@ -6909,27 +7186,63 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
                       <h2 style={{ fontSize: "var(--ui-font-heading)", marginTop: 7 }}>{openManualSkill.name}</h2>
                       <p style={{ color: openManualSkill.color, fontSize: "var(--ui-font-body)", marginTop: 4 }}>{openManualSkill.englishName}</p>
                     </div>
-                    <button
-                      type="button"
-                      aria-label="关闭 Skill 说明书"
-                      onClick={() => setOpenManualSkillId(null)}
-                      className="w-8 h-8 rounded-xl flex items-center justify-center"
-                      style={{ border: `1px solid ${openManualSkill.color}35`, background: "#FAF6EF", color: openManualSkill.color }}
-                    >
-                      <X size={13}/>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleSkillLoad(selected.id, openManualSkill.id)}
+                        className="rounded-xl px-2.5"
+                        style={{
+                          height: 32,
+                          border: `1px solid ${openManualSkill.color}55`,
+                          background: openManualLoaded ? "#FAF6EF" : openManualSkill.color,
+                          color: openManualLoaded ? openManualSkill.color : "white",
+                          fontSize: "var(--ui-font-micro)",
+                        }}
+                      >
+                        {openManualLoaded ? "卸载 Skill" : "加载 Skill"}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="关闭 Skill 说明书"
+                        onClick={() => setOpenManualSkillId(null)}
+                        className="w-8 h-8 rounded-xl flex items-center justify-center"
+                        style={{ border: `1px solid ${openManualSkill.color}35`, background: "#FAF6EF", color: openManualSkill.color }}
+                      >
+                        <X size={13}/>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="p-4 flex flex-col gap-4">
                     <section>
                       <div className="flex items-center gap-2">
                         <span className="rounded-full px-2 py-1" style={{ color: openManualSkill.color, background: `${openManualSkill.color}12`, fontSize: "var(--ui-font-micro)" }}>00 · OVERVIEW</span>
-                        <span style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)" }}>已加载到 {selected.name}</span>
+                        <span style={{ color: openManualLoaded ? "#6B9E7A" : "#8E867A", fontSize: "var(--ui-font-caption)" }}>
+                          {openManualLoaded ? `已加载到 ${selected.name}` : `尚未加载到 ${selected.name}`}
+                        </span>
                       </div>
                       <p style={{ color: "#625D54", fontSize: "var(--ui-font-body)", lineHeight: 1.8, marginTop: 8 }}>
                         {openManualSkill.manual?.overview || openManualSkill.summary}
                       </p>
                     </section>
+
+                    {openManualSkill.id === "supervised-training" && openManualLoaded && <SupervisedTrainingConsole/>}
+
+                    {openManualSkill.id === "supervised-training" && !openManualLoaded && (
+                      <section className="rounded-2xl p-3 text-center" style={{ background: "#F0EBE2", border: `1px dashed ${openManualSkill.color}65` }}>
+                        <p style={{ color: "#625D54", fontSize: "var(--ui-font-caption)", lineHeight: 1.6 }}>
+                          监督训练已从 Dotti 卸载。重新加载后才会连接摄像头与“练了吗”本地模型服务。
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => toggleSkillLoad(selected.id, openManualSkill.id)}
+                          className="rounded-xl mt-2 px-3 py-2"
+                          style={{ background: openManualSkill.color, color: "white", fontSize: "var(--ui-font-caption)" }}
+                        >
+                          加载监督训练
+                        </button>
+                      </section>
+                    )}
 
                     {openManualSkill.manual ? (
                       <>
