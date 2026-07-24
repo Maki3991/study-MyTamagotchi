@@ -1,3 +1,5 @@
+import { SUPERVISED_TRAINING_SKILL } from "./skills/supervisedTrainingSkill";
+
 export type PlazaSkill = {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export type PlazaSkill = {
   version: string;
   source: string;
   capabilities: string[];
+  featured?: boolean;
   manual?: {
     overview: string;
     setup: string[];
@@ -26,6 +29,7 @@ export type AgentSkillBinding = {
 };
 
 export const PLAZA_SKILLS: PlazaSkill[] = [
+  SUPERVISED_TRAINING_SKILL,
   {
     id: "route-mapping",
     name: "路线测绘",
@@ -120,6 +124,7 @@ export const PLAZA_SKILLS: PlazaSkill[] = [
 ];
 
 export const PLAZA_AGENT_SKILL_BINDINGS: AgentSkillBinding[] = [
+  { agentId: "dotti", skillId: "supervised-training", state: "mastered", proficiency: 98 },
   { agentId: "miko", skillId: "emotional-care", state: "mastered", proficiency: 92 },
   { agentId: "miko", skillId: "route-mapping", state: "learning", proficiency: 68 },
   { agentId: "shutter", skillId: "visual-archive", state: "mastered", proficiency: 95 },
@@ -135,6 +140,7 @@ export const PLAZA_AGENT_SKILL_BINDINGS: AgentSkillBinding[] = [
 ];
 
 export const MY_AGENT_SKILL_LOADOUTS: Record<string, string[]> = {
+  dotti: ["supervised-training"],
   miko: ["emotional-care"],
   shutter: ["visual-archive"],
   noct: ["fitness-companion"],

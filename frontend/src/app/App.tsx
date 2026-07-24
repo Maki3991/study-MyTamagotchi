@@ -6610,9 +6610,22 @@ function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; 
 
 function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
   const { world, error } = useWorldEvolution(4000);
-  const [selectedAgentId, setSelectedAgentId] = useState("miko");
+  const [selectedAgentId, setSelectedAgentId] = useState("dotti");
   const [openManualSkillId, setOpenManualSkillId] = useState<string | null>(null);
   const growthAgents = [
+    {
+      id: "dotti",
+      name: "Dotti",
+      role: "Training Watchdog",
+      portrait: "实时监督型训练智能体",
+      color: "#B67C42",
+      level: 14,
+      memories: 36,
+      traits: ["专注", "耐心", "安全优先"],
+      belief: "先看清动作，再在真正需要时提醒；训练不是催促，而是持续守护。",
+      evolution: "正在把本地姿态识别、动作计数与纠错节奏整理成可以独立加载的监督训练方法。",
+      art: <img src={petDachshundPng} alt="腊肠犬 Dotti" draggable={false} style={{ width: 132, height: 132, objectFit: "contain" }}/>,
+    },
     {
       id: "miko",
       name: "Miko",
@@ -6690,7 +6703,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
         </div>
       </div>
 
-      <div className="px-4 pb-3 flex gap-2">
+      <div className="px-4 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
         {growthAgents.map(agent => {
           const active = selected.id === agent.id;
           return (
@@ -6701,8 +6714,9 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
                 setSelectedAgentId(agent.id);
                 setOpenManualSkillId(null);
               }}
-              className="flex-1 rounded-xl px-2 py-2 flex items-center gap-2 text-left"
+              className="shrink-0 rounded-xl px-2 py-2 flex items-center gap-2 text-left"
               style={{
+                width: 112,
                 background: active ? `${agent.color}12` : "#FAF6EF",
                 border: `1.5px solid ${active ? agent.color : "rgba(28,25,17,.1)"}`,
                 color: active ? agent.color : "#8E867A",
@@ -6814,15 +6828,28 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
                     type="button"
                     aria-expanded={openManualSkillId === skill.id}
                     onClick={() => setOpenManualSkillId(current => current === skill.id ? null : skill.id)}
-                    className="rounded-2xl p-3 text-left"
-                    style={{ background: `${skill.color}10`, border: `1.5px solid ${skill.color}45` }}
+                    className={`${skill.featured ? "col-span-2" : ""} rounded-2xl p-3 text-left`}
+                    style={{
+                      background: skill.featured
+                        ? `linear-gradient(135deg,${skill.color}22,#FAF6EF 58%,${skill.color}0D)`
+                        : `${skill.color}10`,
+                      border: `${skill.featured ? 2 : 1.5}px solid ${skill.color}${skill.featured ? "90" : "45"}`,
+                      boxShadow: skill.featured ? `0 8px 22px ${skill.color}18` : undefined,
+                    }}
                   >
                     <div className="flex items-center justify-between">
                       <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${skill.color}18`, color: skill.color }}><Check size={13}/></span>
-                      <span style={{ color: skill.color, fontSize: "var(--ui-font-micro)" }}>MASTERED · {binding.proficiency}</span>
+                      <span style={{ color: skill.color, fontSize: "var(--ui-font-micro)" }}>
+                        {skill.featured ? "CORE SKILL · " : "MASTERED · "}{binding.proficiency}
+                      </span>
                     </div>
-                    <p style={{ fontSize: "var(--ui-font-label)", marginTop: 9 }}>{skill.name}</p>
-                    <p style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", lineHeight: 1.5, marginTop: 5 }}>{skill.capabilities.slice(0, 2).join(" · ")}</p>
+                    <p style={{ fontSize: skill.featured ? "var(--ui-font-heading)" : "var(--ui-font-label)", marginTop: 9 }}>{skill.name}</p>
+                    {skill.featured && (
+                      <p style={{ color: "#625D54", fontSize: "var(--ui-font-caption)", lineHeight: 1.55, marginTop: 5 }}>{skill.summary}</p>
+                    )}
+                    <p style={{ color: skill.featured ? skill.color : "#7A7468", fontSize: "var(--ui-font-caption)", lineHeight: 1.5, marginTop: 7 }}>
+                      {skill.capabilities.slice(0, skill.featured ? 4 : 2).join(" · ")}
+                    </p>
                     <div className="mt-2 flex flex-col gap-1.5">
                       <p style={{ color: skill.color, fontSize: "var(--ui-font-micro)" }}>{skill.source} · v{skill.version}</p>
                       <span className="flex items-center gap-0.5 self-end" style={{ color: skill.color, fontSize: "var(--ui-font-micro)" }}>
