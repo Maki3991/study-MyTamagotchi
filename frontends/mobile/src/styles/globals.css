@@ -2011,6 +2011,38 @@
   animation: pulse 1.8s ease-in-out infinite;
 }
 
+.themed-world-chain-skill {
+  position: absolute;
+  right: 10px;
+  bottom: 49px;
+  z-index: 18;
+  display: flex;
+  height: 27px;
+  max-width: 152px;
+  padding: 0 8px;
+  align-items: center;
+  gap: 5px;
+  color: #6d6884;
+  background: rgba(250, 246, 239, .94);
+  border: 1px solid rgba(109, 104, 132, .32);
+  border-radius: 9px;
+  box-shadow: 0 3px 12px rgba(28, 25, 17, .07);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 7px;
+}
+
+.themed-world-chain-skill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.themed-world-chain-skill.is-receipt {
+  color: #4f855f;
+  border-color: rgba(79, 133, 95, .35);
+}
+
 .fixed-world-canvas.is-compact {
   min-height: 0;
 }

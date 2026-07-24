@@ -40,6 +40,11 @@ import {
   type SkillForgeTraceEvent,
 } from "./skillForgeHarness";
 import { WebPlazaScene } from "./WebPlazaScene";
+import { ChainPlazaScreen } from "./ChainPlazaScreen";
+import {
+  chainPlazaAdapter,
+  type ChainSkillListing,
+} from "./chainPlazaAdapter";
 import {
   THEMED_WORLDS,
   ThemedWorldPreview,
@@ -6091,7 +6096,7 @@ function EnvironmentObjectsArchive() {
   );
 }
 
-type AgentArchiveSection = "agents" | "objects" | "identity" | "device";
+type AgentArchiveSection = "agents" | "objects" | "identity" | "chain" | "device";
 
 function AgentArchiveTabs({ active, onChange }: {
   active: AgentArchiveSection;
@@ -6101,11 +6106,12 @@ function AgentArchiveTabs({ active, onChange }: {
     { id: "agents", label: "Agents" },
     { id: "objects", label: "Objects" },
     { id: "identity", label: "Identity" },
+    { id: "chain", label: "Chain" },
     { id: "device", label: "Device" },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5 px-5 pb-2">
+    <div className="grid grid-cols-5 gap-1.5 px-5 pb-2">
       {tabs.map(tab => {
         const selected = active === tab.id;
         return (
@@ -6127,6 +6133,199 @@ function AgentArchiveTabs({ active, onChange }: {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function AgentChainScreen({ archiveTabs }: { archiveTabs?: React.ReactNode }) {
+  const profiles = useMemo(() => chainPlazaAdapter.listAgentProfiles(), []);
+  const [wallet, setWallet] = useState(() => chainPlazaAdapter.getWallet());
+  const [profileId, setProfileId] = useState(profiles[0]?.agentId || "dotti");
+  const [autoPayEnabled, setAutoPayEnabled] = useState(true);
+  const [listings, setListings] = useState<ChainSkillListing[]>([]);
+  const profile = profiles.find(item => item.agentId === profileId) || profiles[0];
+  const receipts = chainPlazaAdapter.listReceipts()
+    .filter(receipt => receipt.buyerAgentId === profile.agentId);
+  const installedSkills = listings.filter(listing => (
+    profile.installedSkillIds.includes(listing.id)
+    || receipts.some(receipt => receipt.listingId === listing.id)
+  ));
+  const budgetRatio = Math.min(100, (profile.spentInj / profile.dailyBudget) * 100);
+
+  useEffect(() => {
+    let active = true;
+    chainPlazaAdapter.listSkills().then(items => {
+      if (active) setListings(items);
+    });
+    const unsubscribeWallet = chainPlazaAdapter.subscribeWallet(() => {
+      setWallet(chainPlazaAdapter.getWallet());
+    });
+    return () => {
+      active = false;
+      unsubscribeWallet();
+    };
+  }, []);
+
+  useEffect(() => {
+    setAutoPayEnabled(true);
+  }, [profileId]);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden" style={{ background: "#F5F0E8", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+      <PhoneStatusBar showConnectivity={false}/>
+      <div className="flex items-center justify-between px-5 py-2">
+        <span className="w-5"/>
+        <div className="text-center">
+          <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-title)", fontWeight: 700 }}>Agent On-chain</p>
+          <p style={{ color: "#6D6884", fontSize: "var(--ui-font-micro)" }}>IDENTITY · BUDGET · LICENSE</p>
+        </div>
+        <span className="flex w-5 items-center justify-end"><Radio size={13} color="#6D6884"/></span>
+      </div>
+      {archiveTabs}
+
+      <div className="flex-1 overflow-y-auto px-5 pb-5">
+        <div
+          className="mb-3 flex items-center justify-between rounded-2xl px-3 py-2.5"
+          style={{ color: "#6D6884", background: "rgba(109,104,132,.08)", border: "1px solid rgba(109,104,132,.17)" }}
+        >
+          <span className="inline-flex items-center gap-1.5" style={{ fontSize: "var(--ui-font-caption)" }}>
+            <Radio size={12}/>Injective EVM · 1439
+          </span>
+          <span style={{ fontSize: "var(--ui-font-micro)" }}>LIVE TESTNET</span>
+        </div>
+
+        <p style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>SELECT AGENT IDENTITY</p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {profiles.map(item => {
+            const selected = item.agentId === profile.agentId;
+            return (
+              <button
+                key={item.agentId}
+                type="button"
+                onClick={() => setProfileId(item.agentId)}
+                className="rounded-xl px-2 py-2.5 text-left"
+                style={{
+                  color: selected ? "white" : "#5F594F",
+                  background: selected ? "#6D6884" : "#FAF6EF",
+                  border: `1px solid ${selected ? "#6D6884" : "rgba(28,25,17,.11)"}`,
+                }}
+              >
+                <strong className="block" style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)" }}>{item.name}</strong>
+                <span className="mt-1 block truncate" style={{ opacity: .78, fontSize: "var(--ui-font-micro)" }}>{item.tokenId}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <section
+          className="mt-3 rounded-[22px] p-4"
+          style={{ color: "#FAF6EF", background: "#1C1911", boxShadow: "0 10px 24px rgba(28,25,17,.12)" }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full px-2 py-1"
+                style={{ color: "#B9D6C0", background: "rgba(107,158,122,.18)", fontSize: "var(--ui-font-micro)" }}>
+                <Check size={10}/>ERC-8004 VERIFIED
+              </span>
+              <h2 className="mt-3" style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", lineHeight: 1 }}>
+                {profile.name} <small style={{ color: "#BEB7AA", fontSize: "var(--ui-font-caption)" }}>{profile.tokenId}</small>
+              </h2>
+              <p className="mt-2" style={{ color: "#C9C2B6", fontSize: "var(--ui-font-caption)" }}>{profile.role}</p>
+            </div>
+            <div className="text-right">
+              <strong style={{ color: "#B9D6C0", fontSize: 22 }}>{profile.reputation || "NEW"}</strong>
+              <span className="block" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>REPUTATION</span>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2" style={{ fontSize: "var(--ui-font-micro)" }}>
+            <span>
+              <small style={{ color: "#8E867A" }}>IDENTITY REF</small>
+              <strong className="mt-1 block truncate">{profile.identityRef}</strong>
+            </span>
+            <span>
+              <small style={{ color: "#8E867A" }}>FEE RECIPIENT</small>
+              <strong className="mt-1 block">{profile.walletAddress}</strong>
+            </span>
+          </div>
+        </section>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {[
+            { label: "钱包余额", value: wallet.connected ? wallet.injBalance.toFixed(4) : "—", unit: "INJ" },
+            { label: "待领取收益", value: wallet.connected ? wallet.pendingRevenueInj.toFixed(4) : profile.earnedInj.toFixed(4), unit: "INJ" },
+            { label: "许可证", value: String(installedSkills.length), unit: "SKILLS" },
+          ].map(item => (
+            <div key={item.label} className="rounded-2xl p-3" style={{ background: "#FAF6EF", border: "1px solid rgba(28,25,17,.1)" }}>
+              <span className="block" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>{item.label}</span>
+              <strong className="mt-2 block" style={{ color: "#1C1911", fontSize: "var(--ui-font-section)" }}>{item.value}</strong>
+              <small style={{ color: "#6D6884", fontSize: 8 }}>{item.unit}</small>
+            </div>
+          ))}
+        </div>
+
+        <section className="mt-3 rounded-[20px] p-4" style={{ background: "#FAF6EF", border: "1px solid rgba(28,25,17,.1)" }}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p style={{ color: "#1C1911", fontSize: "var(--ui-font-label)" }}>Agent 消费预算</p>
+              <p className="mt-1" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>
+                今日 {profile.spentInj.toFixed(4)} / {profile.dailyBudget.toFixed(3)} INJ
+              </p>
+            </div>
+            <span style={{ color: "#6D6884", fontSize: "var(--ui-font-caption)" }}>{Math.round(budgetRatio)}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "#EAE5DA" }}>
+            <i className="block h-full rounded-full" style={{ width: `${budgetRatio}%`, background: "#6D6884" }}/>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div>
+              <p style={{ color: "#1C1911", fontSize: "var(--ui-font-caption)" }}>
+                ≤ {profile.autoPayLimit.toFixed(4)} INJ 自动支付
+              </p>
+              <p className="mt-1" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>仅限已验证和白名单 Skill</p>
+            </div>
+            <button
+              type="button"
+              aria-label={`${profile.name} 的自动支付权限`}
+              aria-pressed={autoPayEnabled}
+              onClick={() => setAutoPayEnabled(current => !current)}
+              className="relative h-6 w-11 shrink-0 rounded-full"
+              style={{ background: autoPayEnabled ? "#6B9E7A" : "#D6D0C5" }}
+            >
+              <i
+                className="absolute top-1 h-4 w-4 rounded-full bg-white transition-all"
+                style={{ left: autoPayEnabled ? 23 : 4 }}
+              />
+            </button>
+          </div>
+        </section>
+
+        <div className="mt-4 flex items-center justify-between">
+          <p style={{ color: "#1C1911", fontSize: "var(--ui-font-label)" }}>已安装的链上 Skill</p>
+          <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>{installedSkills.length} LICENSES</span>
+        </div>
+        <div className="mt-2 grid gap-2">
+          {installedSkills.map(skill => (
+            <div key={skill.id} className="flex items-center justify-between gap-3 rounded-2xl px-3 py-3"
+              style={{ background: "#FAF6EF", border: `1px solid ${skill.color}28` }}>
+              <span className="min-w-0">
+                <strong className="block truncate" style={{ color: "#1C1911", fontSize: "var(--ui-font-caption)" }}>{skill.name}</strong>
+                <small className="mt-1 block" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>
+                  {skill.price.mode === "per_call" ? `${skill.price.amount} ${skill.price.asset} /次` : "永久 License"}
+                </small>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1" style={{ color: "#579447", fontSize: "var(--ui-font-micro)" }}>
+                <Package size={11}/>已验证
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 rounded-2xl px-3 py-3"
+          style={{ color: "#6D6884", background: "rgba(109,104,132,.07)", border: "1px solid rgba(109,104,132,.14)", fontSize: "var(--ui-font-micro)", lineHeight: 1.55 }}>
+          <Lock size={12} className="mr-1.5 inline"/>
+          私钥不会交给 Agent；所有超过自动支付限额的操作都需要用户确认。
+        </div>
+      </div>
     </div>
   );
 }
@@ -6968,7 +7167,7 @@ function BranchResolutionScreen({ navigate }: { navigate: (s: Screen) => void })
 }
 
 type HomeScene = "worldDock" | "everyday" | "stardom" | "future" | "creator" | "custom";
-type HomeView = "scene" | "civilization" | "plaza";
+type HomeView = "scene" | "civilization" | "plaza" | "chainPlaza";
 
 function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; size?: number }) {
   const asset = WORLD_STYLE_SKILL_ASSETS.find(item => item.type === type);
@@ -8841,7 +9040,7 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
     <div style={{
       width: 340,
       display: "grid",
-      gridTemplateColumns: "repeat(3,minmax(0,1fr))",
+      gridTemplateColumns: "repeat(4,minmax(0,1fr))",
       gap: 4,
       padding: 4,
       borderRadius: 14,
@@ -8924,6 +9123,24 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
         }}
       >
         Plaza
+      </button>
+      <button
+        type="button"
+        aria-pressed={view === "chainPlaza"}
+        onClick={() => onViewChange("chainPlaza")}
+        style={{
+          height: 32,
+          border: "none",
+          borderRadius: 10,
+          background: view === "chainPlaza" ? "#6D6884" : "transparent",
+          color: view === "chainPlaza" ? "white" : "#8E867A",
+          boxShadow: view === "chainPlaza" ? "0 1px 4px rgba(28,25,17,.16)" : "none",
+          cursor: "pointer",
+          fontSize: "var(--ui-font-micro)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        链上广场
       </button>
     </div>
   );
@@ -9274,6 +9491,7 @@ export default function App() {
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-hidden flex flex-col">
               {homeView === "civilization" && <AgentGrowthScreen sceneControl={sceneControl}/>}
+              {homeView === "chainPlaza" && <ChainPlazaScreen sceneControl={sceneControl}/>}
               {homeView === "plaza" && (
                 <PlazaScreen
                   sceneControl={sceneControl}
@@ -9433,6 +9651,7 @@ export default function App() {
                   archiveTabs={archiveTabs}
                 />
               )}
+              {gallerySub === "chain" && <AgentChainScreen archiveTabs={archiveTabs}/>}
               {gallerySub === "device" && <Esp32Screen navigate={navigate} archiveTabs={archiveTabs}/>}
             </div>
           </div>

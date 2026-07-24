@@ -17,8 +17,10 @@ import {
   Radio,
   Route,
   Sparkles,
+  WalletCards,
   X,
 } from "lucide-react";
+import { chainPlazaAdapter } from "./chainPlazaAdapter";
 import { useWorldEvolution } from "./useWorldEvolution";
 
 export type ThemedWorldKey = "fitness" | "learning" | "maker";
@@ -849,6 +851,10 @@ export function ThemedWorldScreen({
   const [worldlineVisible, setWorldlineVisible] = useState(true);
   const [visitorVisible, setVisitorVisible] = useState(true);
   const [learningProgressOpen, setLearningProgressOpen] = useState(false);
+  const [chainReceiptVisible, setChainReceiptVisible] = useState(false);
+  const [chainCallPending, setChainCallPending] = useState(false);
+  const [chainCallError, setChainCallError] = useState("");
+  const chainReceiptTimer = useRef<number | null>(null);
   const worldTopic = useMemo(() => config.topics.join(" · "), [config.topics]);
   const activeResident = residents.find(resident => resident.id === activeResidentId) || residents[0];
   const recordSource = world?.agents.find(agent => agent.id === activeResident.recordSourceId);
@@ -861,6 +867,32 @@ export function ThemedWorldScreen({
     config.learningRecords.length,
     Math.max(1, world?.meta.eraNumber || 1),
   );
+  const chainSkill = config.id === "fitness"
+    ? { slug: "fitness-supervision", name: "健身监督", price: "0.0003 INJ", agent: "Dotti" }
+    : config.id === "learning"
+      ? { slug: "english-learning", name: "英语学习", price: "0.0002 INJ", agent: "Puck" }
+      : { slug: "shared-chronicle", name: "共同编年史", price: "0.004 INJ", agent: "Ansel" };
+
+  const callChainSkill = async () => {
+    if (chainCallPending) return;
+    setChainCallPending(true);
+    setChainCallError("");
+    if (chainReceiptTimer.current) window.clearTimeout(chainReceiptTimer.current);
+    try {
+      await chainPlazaAdapter.callSkillBySlug(chainSkill.slug, activeResident?.id || "scene-agent");
+      setChainReceiptVisible(true);
+      chainReceiptTimer.current = window.setTimeout(() => setChainReceiptVisible(false), 3600);
+    } catch (chainError) {
+      setChainCallError(chainError instanceof Error ? chainError.message : "链上调用失败");
+      chainReceiptTimer.current = window.setTimeout(() => setChainCallError(""), 4200);
+    } finally {
+      setChainCallPending(false);
+    }
+  };
+
+  useEffect(() => () => {
+    if (chainReceiptTimer.current) window.clearTimeout(chainReceiptTimer.current);
+  }, []);
 
   return (
     <main
@@ -950,6 +982,25 @@ export function ThemedWorldScreen({
                 : "零件信使正在抵达"}
           </button>
         )}
+        <button
+          type="button"
+          className={`themed-world-chain-skill ${chainReceiptVisible ? "is-receipt" : ""}`}
+          onClick={callChainSkill}
+          disabled={chainCallPending}
+          title={chainCallError}
+          aria-label={`调用链上 Skill：${chainSkill.name}`}
+        >
+          {chainReceiptVisible ? <Check size={10}/> : <WalletCards size={10}/>}
+          <span>
+            {chainReceiptVisible
+              ? `${chainSkill.agent} · 收据已验证`
+              : chainCallPending
+                ? "等待钱包签名…"
+                : chainCallError
+                  ? "链上调用失败 · 检查钱包"
+              : `${chainSkill.name} · ${chainSkill.price}`}
+          </span>
+        </button>
       </section>
 
       <footer className="themed-world-screen__footer">
