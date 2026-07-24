@@ -3,6 +3,11 @@ dist/
 __pycache__/
 *.pyc
 .venv/
+.venv-*/
 .env
 *.db
+*.sqlite3
 .DS_Store
+
+# 硬件固件构建产物（3MB，改由 Release/LFS 分发，见 frontends/hardware/README.md）
+*.bin

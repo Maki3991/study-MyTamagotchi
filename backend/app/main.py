@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import llm, pets, skills_runtime, world
+from . import llm, pets, skills_runtime, world, world_routes
 from .db import engine, get_session, init_db
 from .models import Agent, Artifact, Memory, Skill, User, now
 from .seed import seed, sync_default_skills
@@ -26,6 +26,9 @@ app.add_middleware(
 )
 
 ME_USER_ID = 1  # ForkWorld UI 为单用户 demo，其余种子用户提供广场 NPC
+
+# 「世界互访」接口（大屏/硬件端消费）：/api/worlds /api/profile /api/bump /api/visit /api/ws
+app.include_router(world_routes.router)
 
 
 async def _auto_tick_loop():
