@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from . import llm, skills_runtime
+from . import world_routes
 from .db import get_session, init_db
 from .models import Agent, Artifact, Memory, Skill, User, now
 from .seed import seed, sync_default_skills
@@ -21,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 「世界互访」接口（大屏/硬件端消费）：/api/worlds /api/profile /api/bump /api/visit /api/ws
+app.include_router(world_routes.router)
 
 
 @app.on_event("startup")
