@@ -6,7 +6,7 @@ import {
   Search, Star, Clock, Heart, Zap, Globe, Home, X, Check,
   Lock, Eye, Layers, ArrowRight, Radio, Cpu, Compass, Settings,
   Volume2, RotateCcw, Move, Trash2, Package, Music,
-  Lightbulb, Headphones, Mic, Rocket, Telescope, Bot,
+  Lightbulb, Headphones, Mic, Rocket, Telescope, Bot, Dumbbell, Hammer,
   Image as ImageIcon, Brush, Scissors, RotateCw, FlipHorizontal,
   ChevronDown, ChevronUp, ZoomIn, ZoomOut, Undo2, Loader2
 } from "lucide-react";
@@ -17,16 +17,8 @@ import {
   type StyleAgentIdentitySeed,
 } from "./CharacterSettingsScreen";
 import { useWorldEvolution } from "./useWorldEvolution";
-import { worldApi, type WorldAgent } from "./worldApi";
+import type { WorldAgent } from "./worldApi";
 import { petApi, waitForPet, type PetAsset, type PetJob } from "./petApi";
-import {
-  backendApi,
-  ME_USER_ID,
-  type BackendAgent,
-  type BackendAgentDetail,
-  type CatalogSkill,
-  type DialogLine,
-} from "./backendApi";
 import {
   WORLD_STYLE_SKILLS,
   WORLD_STYLE_SKILL_ASSETS,
@@ -47,6 +39,16 @@ import {
   type SkillForgeManifest,
   type SkillForgeTraceEvent,
 } from "./skillForgeHarness";
+import { WebPlazaScene } from "./WebPlazaScene";
+import {
+  THEMED_WORLDS,
+  ThemedWorldPreview,
+  ThemedWorldScreen,
+  type ThemedWorldConfig,
+  type ThemedWorldDecoration,
+  type ThemedWorldKey,
+  type ThemedWorldResident,
+} from "./ThemedWorldScenes";
 import {
   SUPERVISED_TRAINING_EXERCISES,
   createSupervisedTrainingProvider,
@@ -70,6 +72,8 @@ import modernBusShelterPng from "../assets/world/modern/bus-shelter.png";
 import modernPostboxPng from "../assets/world/modern/postbox.png";
 import modernFountainPng from "../assets/world/modern/fountain.png";
 import modernKioskPng from "../assets/world/modern/kiosk.png";
+import lakeArchivistPng from "../assets/world/style-skills/lake-mystery/archivist.png";
+import lakeBotanistPng from "../assets/world/style-skills/lake-mystery/botanist.png";
 import pentimentScriptoriumPng from "../assets/world/style-skills/pentiment/buildings/scriptorium.png";
 import pentimentBakeryPng from "../assets/world/style-skills/pentiment/buildings/bakery.png";
 import pentimentChapelPng from "../assets/world/style-skills/pentiment/buildings/chapel.png";
@@ -92,11 +96,55 @@ type Screen =
 
 type WorldTheme = "everyday" | "stardom" | "future";
 
+type WorldCreatorStep = "identity" | "agent" | "house" | "theme" | "npcs" | "topic" | "skills";
+type WorldCreatorAgentMode = "preset" | "photo";
+type WorldCreatorIdentity = "resident" | "visitor";
+
+type WorldCreatorDraft = {
+  identity: WorldCreatorIdentity;
+  agentMode: WorldCreatorAgentMode;
+  agentId: string;
+  agentName: string;
+  houseId: string;
+  themeKey: ThemedWorldKey;
+  npcStyle: ThemedWorldKey;
+  topic: string;
+  worldName: string;
+  skillId: string;
+};
+
+type CreatedCustomWorld = WorldCreatorDraft & {
+  id: string;
+  createdAt: number;
+};
+
+type CreatedPlazaVisitor = {
+  id: string;
+  agentMode: WorldCreatorAgentMode;
+  agentId: string;
+  agentName: string;
+  skillId: string;
+  createdAt: number;
+};
+
+const DEFAULT_WORLD_CREATOR_DRAFT: WorldCreatorDraft = {
+  identity: "resident",
+  agentMode: "preset",
+  agentId: "dotti",
+  agentName: "Dotti",
+  houseId: "",
+  themeKey: "fitness",
+  npcStyle: "fitness",
+  topic: "身体觉察与科学训练",
+  worldName: "My Learning Habitat",
+  skillId: "fitness-companion",
+};
+
 // ── World DNA ──────────────────────────────────────────────────────────────────
 const DNA = {
   everyday: {
-    name: "Everyday Memory Town",
-    short: "Memory Town",
+    name: "Vitality Gym Town",
+    short: "Gym Town",
     paper: "#F5F0E8",
     line: "#1C1911",
     a1: "#E8634A",
@@ -107,9 +155,9 @@ const DNA = {
     water: "#9BBFCF",
   },
   stardom: {
-    name: "Stardom District",
-    short: "Stardom",
-    paper: "#FFF5F8",
+    name: "Learning Commons",
+    short: "Open School",
+    paper: "#F2F4ED",
     line: "#1C1911",
     a1: "#E8191A",
     a2: "#D4A800",
@@ -119,12 +167,12 @@ const DNA = {
     water: "#F5C8D8",
   },
   future: {
-    name: "Future Colony",
-    short: "Colony",
-    paper: "#EAECF2",
+    name: "Maker Harbor",
+    short: "Maker Hall",
+    paper: "#EEF0F4",
     line: "#2A3048",
-    a1: "#0070F3",
-    a2: "#00C8F0",
+    a1: "#6D6884",
+    a2: "#E88752",
     a3: "#8090A8",
     road: "#C8D0DC",
     grass: "#CED6E8",
@@ -143,9 +191,9 @@ const SCREENS: { id: Screen; label: string; icon: React.ReactNode }[] = [
   { id: "motionPreview",  label: "Motion",          icon: <Play size={12}/> },
   { id: "placeInWorld",   label: "Place",           icon: <MapPin size={12}/> },
   { id: "worldBuilder",   label: "Builder",         icon: <Grid3X3 size={12}/> },
-  { id: "everydayTown",   label: "Memory Town",     icon: <Home size={12}/> },
-  { id: "stardomDistrict",label: "Stardom",         icon: <Star size={12}/> },
-  { id: "futureColony",   label: "Colony",          icon: <Rocket size={12}/> },
+  { id: "everydayTown",   label: "Vitality Gym",    icon: <Home size={12}/> },
+  { id: "stardomDistrict",label: "Open School",     icon: <Star size={12}/> },
+  { id: "futureColony",   label: "Maker Hall",      icon: <Rocket size={12}/> },
   { id: "agentDetail",    label: "Agent Detail",    icon: <Package size={12}/> },
   { id: "visitorArrival", label: "Visitor Arrives", icon: <Globe size={12}/> },
   { id: "visitorBranch",  label: "Branch",          icon: <GitMerge size={12}/> },
@@ -1615,22 +1663,111 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
+function themedWorldAgentArt(agentId: string) {
+  const profile = AGENT_PROFILES.find(agent => agent.id === agentId);
+  return (
+    <svg width="58" height="62" viewBox="-32 -34 64 70" aria-hidden="true">
+      {profile?.render(0.82, false)}
+    </svg>
+  );
+}
+
+function themedStyleAgentArt(type: WorldStyleSkillAssetType) {
+  return <PlazaStyleAgent type={type} size={58}/>;
+}
+
+function themedImageAgentArt(src: string) {
+  return <img src={src} alt="" draggable={false} style={{ width: 58, height: 62, objectFit: "contain" }}/>;
+}
+
+function getThemedWorldResidents(): Record<ThemedWorldKey, ThemedWorldResident[]> {
+  return {
+    fitness: [
+      {
+        id: "dotti",
+        name: "Dotti",
+        role: "腊肠犬健身伙伴",
+        color: "#B67C42",
+        art: <img src={petDachshundPng} alt="" draggable={false} style={{ width: 62, height: 62, objectFit: "contain" }}/>,
+        recordSourceId: "miko",
+        featured: true,
+      },
+      { id: "miko", name: "Miko", role: "动作教练", color: "#E8634A", art: themedWorldAgentArt("miko"), recordSourceId: "miko" },
+      { id: "shutter", name: "Shutter", role: "姿态记录员", color: "#4A7FA5", art: themedWorldAgentArt("shutter"), recordSourceId: "shutter" },
+      { id: "nana", name: "Nana", role: "恢复陪伴员", color: "#C890C0", art: themedWorldAgentArt("nana"), recordSourceId: "nana" },
+      { id: "folio", name: "Folio", role: "训练档案员", color: "#4A7FA5", art: themedWorldAgentArt("folio"), recordSourceId: "folio" },
+      { id: "luma", name: "Luma", role: "夜间领跑员", color: "#D4A800", art: themedWorldAgentArt("luma"), recordSourceId: "luma" },
+      { id: "beat", name: "Beat", role: "节奏领练员", color: "#6B9E7A", art: themedWorldAgentArt("beat"), recordSourceId: "beat" },
+      { id: "sprig", name: "Sprig", role: "身体观察员", color: "#6B9E7A", art: themedWorldAgentArt("sprig"), recordSourceId: "sprig" },
+      { id: "tock", name: "Tock", role: "恢复计时员", color: "#E88752", art: themedWorldAgentArt("tock"), recordSourceId: "tock" },
+    ],
+    learning: [
+      { id: "atlas", name: "Atlas", role: "学习路径规划员", color: "#579447", art: themedStyleAgentArt("blockCartographer"), recordSourceId: "luma", featured: true },
+      { id: "honey", name: "Honey", role: "小组学习员", color: "#D4A800", art: themedStyleAgentArt("blockBeekeeper"), recordSourceId: "beat" },
+      { id: "puck", name: "Puck", role: "知识传递员", color: "#8A6A3A", art: themedStyleAgentArt("blockCourier"), recordSourceId: "keylo" },
+      { id: "ember", name: "Ember", role: "实验课程员", color: "#B05F42", art: themedStyleAgentArt("blockAlchemist"), recordSourceId: "folio" },
+      { id: "truffle", name: "Truffle", role: "户外探索学员", color: "#B98565", art: themedStyleAgentArt("blockPig"), recordSourceId: "orbit" },
+      { id: "wooly", name: "Wooly", role: "互助学习员", color: "#D8C9A4", art: themedStyleAgentArt("blockSheep"), recordSourceId: "nana" },
+      { id: "rivet", name: "Rivet", role: "教具维护员", color: "#4A7FA5", art: themedStyleAgentArt("blockMechanic"), recordSourceId: "shutter" },
+      { id: "clover", name: "Clover", role: "课程种子管理员", color: "#6B9E7A", art: themedStyleAgentArt("blockFarmer"), recordSourceId: "sprig" },
+    ],
+    maker: [
+      { id: "corvus", name: "Corvus", role: "故障记录员", color: "#4A4A46", art: themedStyleAgentArt("lakeCrow"), recordSourceId: "orbit", featured: true },
+      { id: "ink", name: "Ink", role: "安全边界员", color: "#6A6957", art: themedStyleAgentArt("lakeCat"), recordSourceId: "joypad" },
+      { id: "noct", name: "Noct", role: "原型观察员", color: "#7D725F", art: themedStyleAgentArt("lakeOwl"), recordSourceId: "mizzle" },
+      { id: "lapin", name: "Lapin", role: "零件信使", color: "#B8AFA0", art: themedStyleAgentArt("lakeRabbit"), recordSourceId: "miko" },
+      { id: "hart", name: "Hart", role: "边界测试员", color: "#8A725A", art: themedStyleAgentArt("lakeDeer"), recordSourceId: "nana" },
+      { id: "moss", name: "Moss", role: "材料回收员", color: "#6B7A55", art: themedStyleAgentArt("lakeFrog"), recordSourceId: "shutter" },
+      { id: "dale", name: "Dale", role: "原型档案员", color: "#566052", art: themedImageAgentArt(lakeArchivistPng), recordSourceId: "folio" },
+      { id: "iris", name: "Iris", role: "材料培育员", color: "#7B6A45", art: themedImageAgentArt(lakeBotanistPng), recordSourceId: "sprig" },
+    ],
+  };
+}
+
+function getCrossWorldVisitors(worldKey: ThemedWorldKey): ThemedWorldResident[] {
+  const residents = getThemedWorldResidents();
+  const visitorSources: Record<ThemedWorldKey, [ThemedWorldKey, string][]> = {
+    fitness: [["learning", "atlas"], ["maker", "corvus"]],
+    learning: [["fitness", "dotti"], ["maker", "corvus"]],
+    maker: [["fitness", "dotti"], ["learning", "atlas"]],
+  };
+  return visitorSources[worldKey].map(([sourceWorld, residentId]) => {
+    const source = residents[sourceWorld].find(resident => resident.id === residentId)!;
+    return {
+      ...source,
+      id: `visitor-${sourceWorld}-${source.id}`,
+      role: `串门访客 · 来自 ${THEMED_WORLDS[sourceWorld].buildingName}`,
+      featured: false,
+      visitor: true,
+    };
+  });
+}
+
 // ── SCREENS ────────────────────────────────────────────────────────────────────
 
 // 1. WORLD DOCK
-function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate: (s: Screen) => void; sceneControl: React.ReactNode; onOpenChronicle: () => void }) {
-  const [dockStats, setDockStats] = useState<{ agents: number; skills: number; memories: number } | null>(null);
-  useEffect(() => {
-    let mounted = true;
-    Promise.all([backendApi.agents(), backendApi.allSkills(), worldApi.getWorld()])
-      .then(([agents, skills, world]) => {
-        if (!mounted) return;
-        const memories = world.agents.reduce((t, a) => t + a.memories.length, 0);
-        setDockStats({ agents: agents.length, skills: skills.length, memories });
-      })
-      .catch(() => {});
-    return () => { mounted = false; };
-  }, []);
+function WorldDockScreen({
+  navigate,
+  sceneControl,
+  onOpenChronicle,
+  customWorld,
+  onCreateWorld,
+  onOpenCustomWorld,
+}: {
+  navigate: (s: Screen) => void;
+  sceneControl: React.ReactNode;
+  onOpenChronicle: () => void;
+  customWorld?: { config: ThemedWorldConfig; residents: ThemedWorldResident[]; houseId: string } | null;
+  onCreateWorld: () => void;
+  onOpenCustomWorld: () => void;
+}) {
+  const residents = getThemedWorldResidents();
+  const worldCards: { key: ThemedWorldKey; screen: Screen; houseId: string }[] = [
+    { key: "fitness", screen: "everydayTown", houseId: "H04" },
+    { key: "learning", screen: "stardomDistrict", houseId: "H12" },
+    { key: "maker", screen: "futureColony", houseId: "H20" },
+  ];
+
   return (
     <div className="flex flex-col h-full overflow-y-auto"
       style={{ background: "#F5F0E8", fontFamily: "Press Start 2P,monospace" }}>
@@ -1642,7 +1779,7 @@ function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate
             ForkWorld
           </h1>
           <p style={{ fontSize: "var(--ui-font-label)", color: "#7A7468", whiteSpace: "nowrap", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-            {dockStats ? `${dockStats.agents} 位智能体 · ${dockStats.skills} 种skills · ${dockStats.memories} 段记忆` : "连接世界中…"}
+            {AGENT_PROFILES.length} 位智能体 · {PLAZA_SKILLS.length} 种skills · {AGENT_PROFILES.reduce((total, agent) => total + agent.memories, 0)} 段记忆 · 2 位访客
           </p>
         </div>
       </div>
@@ -1668,110 +1805,144 @@ function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate
         </button>
       </div>
 
-      {/* World cards */}
-      <div className="px-5 flex flex-col gap-3 pb-4">
-        {/* Everyday Memory Town */}
-        <button onClick={() => navigate("everydayTown")}
-          className="relative rounded-2xl overflow-hidden text-left"
-          style={{ border: "2px solid rgba(28,25,17,0.13)", boxShadow: "0 2px 12px rgba(28,25,17,0.08)" }}>
-          <div style={{ background: "#F5F0E8", height: "140px", position: "relative", overflow: "hidden" }}>
-            <EverydayTownSVG w={360} h={180} viewX={TOWN_PANEL_W}/>
-            <div style={{
-              position: "absolute", inset: 0,
-              background: "linear-gradient(to bottom, transparent 50%, rgba(245,240,232,0.9) 100%)"
-            }}/>
+      {/* Residents */}
+      <div className="pb-3">
+        <div className="px-5 mb-2 flex items-end justify-between">
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911" }}>World Residents</p>
+            <p style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", marginTop: "3px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>小小物件，也有鲜明人格</p>
           </div>
-          <div className="px-3.5 py-2.5" style={{ background: "#FAF6EF" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700, color: "#1C1911" }}>
-                  Everyday Memory Town
-                </p>
-                <div className="flex gap-2 mt-0.5">
-                  <HandTag text="8 位智能体" color="#E8634A"/>
-                  <HandTag text="12 段记忆" color="#6B9E7A"/>
-                </div>
+          <button onClick={() => navigate("agentGallery")}
+            style={{ color: "#E8634A", fontSize: "var(--ui-font-body)", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>查看全部 →</button>
+        </div>
+        <div className="flex gap-2 px-5 overflow-x-auto">
+          {AGENT_PROFILES.map(a => (
+            <button key={a.id} onClick={() => navigate("agentGallery")}
+              className="flex-shrink-0 rounded-xl overflow-hidden text-left"
+              aria-label={`Open ${a.name} in Agent Archive`}
+              style={{ width: "76px", background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)" }}>
+              <div className="relative flex items-center justify-center" style={{ height: "58px", background: a.color + "14" }}>
+                <svg width="58" height="58" viewBox="-29 -29 58 58">{a.render(0.62, false)}</svg>
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: a.color }}/>
               </div>
-              <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "#6B9E7A" }}/>
-            </div>
-          </div>
-        </button>
-
-        {/* Stardom District */}
-        <button onClick={() => navigate("stardomDistrict")}
-          className="relative rounded-2xl overflow-hidden text-left"
-          style={{ border: "2px solid rgba(28,25,17,0.13)", boxShadow: "0 2px 12px rgba(28,25,17,0.08)" }}>
-          <div style={{ background: "#FFF5F8", height: "110px", position: "relative", overflow: "hidden" }}>
-            <StardomDistrictSVG w={360} h={150}/>
-            <div style={{
-              position: "absolute", inset: 0,
-              background: "linear-gradient(to bottom, transparent 40%, rgba(255,245,248,0.9) 100%)"
-            }}/>
-          </div>
-          <div className="px-3.5 py-2.5" style={{ background: "#FFF5F8" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911" }}>
-                  Stardom District
-                </p>
-                <div className="flex gap-2 mt-0.5">
-                  <HandTag text="4 位智能体" color="#E8191A"/>
-                  <HandTag text="我的世界" color="#579447"/>
-                </div>
+              <div className="px-2 py-1.5">
+                <p className="truncate" style={{ fontSize: "var(--ui-font-body)", color: "#1C1911", fontWeight: 700 }}>{a.name}</p>
+                <p className="truncate" style={{ fontSize: "var(--ui-font-caption)", color: a.color, marginTop: "2px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{localizedAgentRole(a)}</p>
               </div>
-              <div className="w-3 h-3 rounded-full" style={{ background: "#E8191A", boxShadow: "0 0 6px #E8191A80" }}/>
-            </div>
-          </div>
-        </button>
-
-        {/* Future Colony */}
-        <button onClick={() => navigate("futureColony")}
-          className="relative rounded-2xl overflow-hidden text-left"
-          style={{ border: "2px solid rgba(28,25,17,0.13)", boxShadow: "0 2px 12px rgba(28,25,17,0.08)" }}>
-          <div style={{ background: "#EAECF2", height: "100px", position: "relative", overflow: "hidden" }}>
-            <FutureColonySVG w={360} h={140}/>
-            <div style={{
-              position: "absolute", inset: 0,
-              background: "linear-gradient(to bottom, transparent 30%, rgba(234,236,242,0.9) 100%)"
-            }}/>
-          </div>
-          <div className="px-3.5 py-2.5" style={{ background: "#EAECF2" }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911" }}>
-                  Future Colony
-                </p>
-                <div className="flex gap-2 mt-0.5">
-                  <HandTag text="6 只动物" color="#0070F3"/>
-                  <HandTag text="绣湖" color="#6A6957"/>
-                </div>
-              </div>
-              <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "#0070F3" }}/>
-            </div>
-          </div>
-        </button>
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Capture button */}
-      <div className="px-5 pb-2">
-        <button onClick={() => navigate("capture")}
+      {/* World cards */}
+      <div className="px-5 flex flex-col gap-3 pb-4">
+        {worldCards.map(world => (
+          <button
+            key={world.key}
+            type="button"
+            onClick={() => navigate(world.screen)}
+            className="relative rounded-2xl overflow-hidden text-left"
+            aria-label={`进入${THEMED_WORLDS[world.key].chineseName}`}
+            style={{
+              padding: 0,
+              border: `2px solid ${THEMED_WORLDS[world.key].accent}`,
+              boxShadow: `0 0 0 4px ${THEMED_WORLDS[world.key].accent}0D, 0 5px 16px rgba(28,25,17,0.09)`,
+              background: THEMED_WORLDS[world.key].paper,
+            }}
+          >
+            <span style={{
+              position: "absolute",
+              zIndex: 10,
+              top: 9,
+              right: 9,
+              padding: "5px 7px",
+              color: "#FAF6EF",
+              background: THEMED_WORLDS[world.key].accent,
+              borderRadius: 8,
+              fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif",
+              fontSize: "var(--ui-font-micro)",
+            }}>
+              Plaza 重点房 · {world.houseId}
+            </span>
+            <ThemedWorldPreview config={THEMED_WORLDS[world.key]} residents={residents[world.key]} />
+          </button>
+        ))}
+        {customWorld && (
+          <button
+            type="button"
+            onClick={onOpenCustomWorld}
+            className="relative rounded-2xl overflow-hidden text-left"
+            aria-label={`进入我的世界 ${customWorld.config.name}`}
+            style={{
+              padding: 0,
+              border: `2px solid ${customWorld.config.accent}`,
+              boxShadow: `0 0 0 4px ${customWorld.config.accent}16, 0 8px 24px ${customWorld.config.accent}20`,
+              background: customWorld.config.paper,
+            }}
+          >
+            <div style={{
+              position: "absolute",
+              zIndex: 10,
+              top: 10,
+              right: 10,
+              padding: "5px 8px",
+              color: "white",
+              background: customWorld.config.accent,
+              borderRadius: 9,
+              fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif",
+              fontSize: "var(--ui-font-micro)",
+            }}>
+              我的世界 · {customWorld.houseId}
+            </div>
+            <ThemedWorldPreview config={customWorld.config} residents={customWorld.residents} />
+          </button>
+        )}
+      </div>
+
+      {/* Create world + capture buttons */}
+      <div className="px-5 pb-3">
+        <button
+          type="button"
+          onClick={onCreateWorld}
           className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2"
-          style={{ background: "#1C1911", color: "#FAF6EF" }}>
+          style={{
+            color: "#FAF6EF",
+            background: "linear-gradient(135deg,#E8634A,#D18A3D)",
+            border: "1.5px solid rgba(28,25,17,.12)",
+            boxShadow: "0 7px 18px rgba(232,99,74,.2)",
+          }}
+        >
+          <Sparkles size={18}/>
+          <span style={{ fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-label)", fontWeight: 700 }}>
+            {customWorld ? "再创建一个自己的世界" : "创建自己的世界"}
+          </span>
+        </button>
+        <p className="text-center mt-2" style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+          选择主智能体、Plaza 房屋、主题与子智能体研究方向
+        </p>
+        <button onClick={() => navigate("capture")}
+          className="w-full mt-2 py-3 rounded-2xl flex items-center justify-center gap-2"
+          style={{ background: "#FAF6EF", color: "#1C1911", border: "1.5px solid rgba(28,25,17,.16)" }}>
           <Camera size={18}/>
           <span style={{ fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-label)", fontWeight: 700 }}>
             捕获新物件
           </span>
         </button>
-        <p className="text-center mt-2" style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-          “捕获你珍惜的事物，让它成为这个世界的居民。”
-        </p>
       </div>
     </div>
   );
 }
 
 // 2. CAPTURE OBJECT
-function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => void; onGenerated: (asset: PetAsset) => void }) {
+function CaptureScreen({
+  navigate,
+  onGenerated,
+  onBack,
+}: {
+  navigate: (s: Screen) => void;
+  onGenerated: (asset: PetAsset) => void;
+  onBack?: () => void;
+}) {
   const cameraInput = useRef<HTMLInputElement>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   const previewUrl = useRef<string | null>(null);
@@ -1787,7 +1958,7 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
     upload: "正在安全上传",
     stylize: "正在识别并萌化主体",
     "remove-background": "正在提取纯净轮廓",
-    register: "正在整理 Agent 档案",
+    localize: "正在准备本机 Agent",
     complete: "卡通伙伴已经生成",
     failed: "生成失败",
   };
@@ -1802,7 +1973,7 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
     try {
       const submitted = await petApi.submit(file);
       setJob(submitted);
-      const asset = await waitForPet(submitted.id, setJob);
+      const asset = await waitForPet(submitted, setJob);
       onGenerated(asset);
       window.setTimeout(() => navigate("extract"), 480);
     } catch (caught) {
@@ -1815,9 +1986,9 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
     if (!job || job.id === "uploading") return;
     setError(null);
     try {
-      const retried = await petApi.retry(job.id);
+      const retried = await petApi.retry(job);
       setJob(retried);
-      const asset = await waitForPet(retried.id, setJob);
+      const asset = await waitForPet(retried, setJob);
       onGenerated(asset);
       window.setTimeout(() => navigate("extract"), 480);
     } catch (caught) {
@@ -1834,12 +2005,12 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#17150F", color: "#FAF6EF" }}>
-      <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden
+      <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" hidden
         onChange={event => handleFile(event.target.files?.[0])}/>
-      <input ref={uploadInput} type="file" accept="image/jpeg,image/png,image/webp" hidden
+      <input ref={uploadInput} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" hidden
         onChange={event => handleFile(event.target.files?.[0])}/>
       <div className="flex items-center justify-between px-5 pt-9 pb-4">
-        <button onClick={() => navigate("worldDock")} className="w-8 h-8 flex items-center justify-center rounded-full"
+        <button onClick={() => onBack ? onBack() : navigate("worldDock")} className="w-8 h-8 flex items-center justify-center rounded-full"
           style={{ background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,.12)" }}>
           <ChevronLeft size={18} color="white"/>
         </button>
@@ -1945,33 +2116,41 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
                 borderRadius: 10, border: "1px solid rgba(255,255,255,.2)",
                 background: "rgba(255,255,255,.08)", color: "#FAF6EF", fontSize: "var(--ui-font-caption)",
               }}>
-                {job.id === "uploading" ? "重新连接并生成" : "使用已保存原图重新生成"}
+                {job.id === "uploading" ? "重新连接并生成" : "使用本次原图重新生成"}
               </button>
             )}
           </span>
-        ) : "🔒 原图只用于生成你的赛博伙伴，背景不会进入世界"}
+        ) : "🔒 原图仅在本次生成期间临时处理，完成后立即从服务器清除"}
       </p>
     </div>
   );
 }
 
 // 3. EXTRACT OBJECT
-function ExtractScreen({ navigate, pet, onRegistered }: { navigate: (s: Screen) => void; pet: PetAsset | null; onRegistered: (asset: PetAsset) => void }) {
+function ExtractScreen({
+  navigate,
+  pet,
+  onRegistered,
+  onDone,
+}: {
+  navigate: (s: Screen) => void;
+  pet: PetAsset | null;
+  onRegistered: (asset: PetAsset) => void;
+  onDone?: (asset: PetAsset) => void;
+}) {
   const [mode, setMode] = useState<"erase" | "restore">("erase");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const addToAgents = async () => {
+  const addToAgents = () => {
     if (!pet || adding) return;
     setAdding(true);
     setAddError(null);
-    try {
-      const registered = await petApi.register(pet.id);
-      onRegistered(registered);
-      navigate("agentGallery");
-    } catch (caught) {
-      setAddError(caught instanceof Error ? caught.message : "添加失败，请重试");
-      setAdding(false);
+    onRegistered(pet);
+    if (onDone) {
+      onDone(pet);
+      return;
     }
+    navigate("agentGallery");
   };
   return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: "#F5F0E8", fontFamily: "Press Start 2P,monospace" }}>
@@ -3856,6 +4035,8 @@ const BUILDING_DEFS: { type: BuildingType; label: string; category: BuildingCate
   { type: "modernPostbox", label: "旧邮筒", category: "lakeMystery", Asset: () => <GeneratedMapAsset src={modernPostboxPng} alt="绣湖风格邮筒占位素材"/> },
   { type: "modernFountain", label: "静默喷泉", category: "lakeMystery", Asset: () => <GeneratedMapAsset src={modernFountainPng} alt="绣湖风格喷泉占位素材"/> },
   { type: "modernKiosk", label: "标本亭", category: "lakeMystery", Asset: () => <GeneratedMapAsset src={modernKioskPng} alt="绣湖风格小亭占位素材"/> },
+  { type: "tree", label: "湖畔枯树", category: "lakeMystery", Asset: TreeAsset },
+  { type: "bench", label: "旧长椅", category: "lakeMystery", Asset: BenchAsset },
   // Style Skill packs stay independent from the map interaction model.
   ...WORLD_STYLE_SKILL_ASSETS.map(({ type, label, category, src, alt }) => ({
     type,
@@ -3932,13 +4113,14 @@ const STYLE_AGENT_PLACEMENT_TYPES = new Set<BuildingType>(
   WORLD_STYLE_SKILL_ASSETS.map(asset => asset.type),
 );
 
-function BuildPalette({ onPlace, onClose, onGenerateMedieval, onPlaceAllCharacters }: {
+function BuildPalette({ onPlace, onClose, onGenerateMedieval, onPlaceAllCharacters, initialStyle = "dailySpirits" }: {
   onPlace: (type: BuildingType) => void;
   onClose: () => void;
   onGenerateMedieval: () => void;
   onPlaceAllCharacters: (category: BuildPaletteStyle) => void;
+  initialStyle?: BuildPaletteStyle;
 }) {
-  const [style, setStyle] = useState<BuildPaletteStyle>("dailySpirits");
+  const [style, setStyle] = useState<BuildPaletteStyle>(initialStyle);
   const [assetTab, setAssetTab] = useState<BuildPaletteTab>("agents");
   const [dailyObjectCategory, setDailyObjectCategory] = useState<DailyObjectCategory>("everyday");
   const accent = BUILD_PALETTE_STYLES.find(item => item.id === style)?.accent ?? "#E8634A";
@@ -4094,6 +4276,199 @@ function BuildPalette({ onPlace, onClose, onGenerateMedieval, onPlaceAllCharacte
         ))}
       </div>
     </motion.div>
+  );
+}
+
+type ThemedPlacedAsset = {
+  id: number;
+  type: BuildingType;
+  x: number;
+  y: number;
+};
+
+const THEMED_BUILD_SLOTS = [
+  { x: 9, y: 25 }, { x: 91, y: 25 },
+  { x: 9, y: 49 }, { x: 91, y: 49 },
+  { x: 10, y: 75 }, { x: 90, y: 75 },
+  { x: 28, y: 84 }, { x: 72, y: 84 },
+  { x: 27, y: 16 }, { x: 73, y: 16 },
+  { x: 7, y: 63 }, { x: 93, y: 63 },
+];
+
+type ThemedPresetAsset = {
+  type: BuildingType;
+  x: number;
+  y: number;
+  scale?: number;
+};
+
+const THEMED_PRESET_ASSETS: Record<ThemedWorldKey, ThemedPresetAsset[]> = {
+  fitness: [
+    { type: "tree", x: 9, y: 32, scale: 0.72 },
+    { type: "tree", x: 91, y: 27, scale: 0.65 },
+    { type: "mailbox", x: 9, y: 63, scale: 0.54 },
+    { type: "bench", x: 35, y: 79, scale: 0.52 },
+    { type: "fountain", x: 73, y: 79, scale: 0.55 },
+  ],
+  learning: [
+    { type: "tree", x: 9, y: 32, scale: 0.7 },
+    { type: "tree", x: 91, y: 27, scale: 0.64 },
+    { type: "mailbox", x: 91, y: 63, scale: 0.5 },
+    { type: "bench", x: 35, y: 79, scale: 0.5 },
+    { type: "well", x: 73, y: 79, scale: 0.52 },
+  ],
+  maker: [
+    { type: "tree", x: 9, y: 32, scale: 0.7 },
+    { type: "modernPostbox", x: 91, y: 28, scale: 0.48 },
+    { type: "modernKiosk", x: 91, y: 63, scale: 0.47 },
+    { type: "bench", x: 35, y: 79, scale: 0.5 },
+    { type: "modernFountain", x: 73, y: 79, scale: 0.5 },
+  ],
+};
+
+function ThemedWorldHostScreen({
+  worldKey,
+  navigate,
+  sceneControl,
+  capturedPets = [],
+  configOverride,
+  residentsOverride,
+  onBack,
+}: {
+  worldKey: ThemedWorldKey;
+  navigate: (screen: Screen) => void;
+  sceneControl: React.ReactNode;
+  capturedPets?: PetAsset[];
+  configOverride?: ThemedWorldConfig;
+  residentsOverride?: ThemedWorldResident[];
+  onBack?: () => void;
+}) {
+  const [showBuildPalette, setShowBuildPalette] = useState(false);
+  const [placements, setPlacements] = useState<ThemedPlacedAsset[]>([]);
+  const placementId = useRef(0);
+  const residents = residentsOverride ?? [
+    ...getThemedWorldResidents()[worldKey],
+    ...getCrossWorldVisitors(worldKey),
+    ...(worldKey === "fitness"
+      ? capturedPets.slice(0, 4).map(pet => ({
+          id: `captured-${pet.id}`,
+          name: pet.name,
+          role: "新居民",
+          color: "#E8634A",
+          recordSourceId: "miko",
+          art: <img src={pet.finalUrl} alt={pet.name} draggable={false} style={{ width: 58, height: 58, objectFit: "contain" }}/>,
+        }))
+      : []),
+  ];
+  const config = configOverride ?? THEMED_WORLDS[worldKey];
+  const initialStyle: BuildPaletteStyle = worldKey === "fitness"
+    ? "dailySpirits"
+    : worldKey === "learning"
+      ? "blockcraft"
+      : "lakeMystery";
+
+  const addTypes = (types: BuildingType[]) => {
+    setPlacements(previous => [
+      ...previous,
+      ...types.map((type, index) => {
+        const slot = THEMED_BUILD_SLOTS[(previous.length + index) % THEMED_BUILD_SLOTS.length];
+        placementId.current += 1;
+        return { id: placementId.current, type, x: slot.x, y: slot.y };
+      }),
+    ]);
+  };
+
+  const placeAsset = (type: BuildingType) => {
+    addTypes([type]);
+    setShowBuildPalette(false);
+  };
+
+  const placeAllCharacters = (category: BuildPaletteStyle) => {
+    const types: BuildingType[] = category === "dailySpirits"
+      ? AGENT_PROFILES.map(profile => `dailyAgent:${profile.id}` as DailyAgentPlacementType)
+      : WORLD_STYLE_SKILL_ASSETS
+        .filter(asset => asset.category === category)
+        .map(asset => asset.type);
+    addTypes(types);
+    setShowBuildPalette(false);
+  };
+
+  const generateMedievalMap = () => {
+    addTypes([
+      "medWindmill", "medCottage", "medBridge", "medChapel",
+      "medMarket", "medWell", "medWatchtower", "medApothecary",
+    ]);
+    setShowBuildPalette(false);
+  };
+
+  const preferredCategory: BuildingCategory = worldKey === "fitness"
+    ? "everyday"
+    : worldKey === "learning"
+      ? "blockcraft"
+      : "lakeMystery";
+  const findPreferredDefinition = (type: BuildingType) => (
+    BUILDING_DEFS.find(item => item.type === type && item.category === preferredCategory)
+    || BUILDING_DEFS.find(item => item.type === type)
+  );
+  const presetDecorations: ThemedWorldDecoration[] = THEMED_PRESET_ASSETS[worldKey].map((preset, index) => {
+    const definition = findPreferredDefinition(preset.type);
+    const Asset = definition?.Asset;
+    return {
+      id: -(index + 1),
+      label: definition?.label || "场景植物",
+      x: preset.x,
+      y: preset.y,
+      scale: preset.scale,
+      preset: true,
+      art: Asset ? <Asset/> : <BuildingAsset type={preset.type}/>,
+    };
+  });
+  const placedDecorations: ThemedWorldDecoration[] = placements.map(placement => {
+    const definition = findPreferredDefinition(placement.type);
+    const Asset = definition?.Asset;
+    return {
+      ...placement,
+      label: definition?.label || "场景物件",
+      scale: placement.type === "tree" ? 0.7 : undefined,
+      art: Asset ? <Asset/> : <BuildingAsset type={placement.type}/>,
+    };
+  });
+  const decorations = [...presetDecorations, ...placedDecorations];
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      <ThemedWorldScreen
+        config={config}
+        residents={residents}
+        sceneControl={sceneControl}
+        decorations={decorations}
+        onDecorationMove={(id, x, y) => setPlacements(current => current.map(item => item.id === id ? { ...item, x, y } : item))}
+        onDecorationRemove={id => setPlacements(current => current.filter(item => item.id !== id))}
+        onOpenBuild={() => setShowBuildPalette(true)}
+        onCapture={() => navigate("capture")}
+        onBack={onBack ?? (() => navigate("worldDock"))}
+        onOpenWorldline={() => navigate("worldline")}
+        onOpenVisitor={() => navigate("visitorArrival")}
+        onOpenAgents={() => navigate("agentGallery")}
+      />
+
+      <AnimatePresence>
+        {showBuildPalette && (
+          <div
+            style={{ position: "absolute", inset: 0, zIndex: 80 }}
+            onClick={() => setShowBuildPalette(false)}
+          >
+            <BuildPalette
+              initialStyle={initialStyle}
+              onPlace={placeAsset}
+              onClose={() => setShowBuildPalette(false)}
+              onGenerateMedieval={generateMedievalMap}
+              onPlaceAllCharacters={placeAllCharacters}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -4384,7 +4759,7 @@ function EverydayTownScreen({ navigate, sceneControl, capturedPets }: { navigate
             wanderOffsets={wanderOffsets}
           />
 
-          {/* Captured cyber pets are persisted by the backend and enter the live town here. */}
+          {/* Captured cyber pets live only in this page session and enter the live town here. */}
           {capturedPets.slice(0, 8).map((pet, index) => {
             const defaultPosition = {
               x: TOWN_PANEL_W + 56 + (index % 4) * 88,
@@ -5725,11 +6100,12 @@ function AgentArchiveTabs({ active, onChange }: {
   const tabs: { id: AgentArchiveSection; label: string }[] = [
     { id: "agents", label: "Agents" },
     { id: "objects", label: "Objects" },
+    { id: "identity", label: "Identity" },
     { id: "device", label: "Device" },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-1.5 px-5 pb-2">
+    <div className="grid grid-cols-4 gap-1.5 px-5 pb-2">
       {tabs.map(tab => {
         const selected = active === tab.id;
         return (
@@ -5755,15 +6131,14 @@ function AgentArchiveTabs({ active, onChange }: {
   );
 }
 
-function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, backendAgents, onEditBackendAgent }: {
+function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, capturedPets }: {
   navigate: (s: Screen) => void;
   section: "agents" | "objects";
   onSectionChange: (section: AgentArchiveSection) => void;
   drafts: Record<string, AgentEditorDraft>;
   onEditAgent: (agentId: string) => void;
   onOpenSetting: (category: CharacterStyleCategory, type?: WorldStyleSkillAssetType) => void;
-  backendAgents: BackendAgent[];
-  onEditBackendAgent: (agent: BackendAgent) => void;
+  capturedPets: PetAsset[];
 }) {
   const [agentStyle, setAgentStyle] = useState<CharacterStyleCategory>("dailySpirits");
   const activeStyle = AGENT_STYLE_OPTIONS.find(style => style.id === agentStyle) || AGENT_STYLE_OPTIONS[0];
@@ -5776,7 +6151,7 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
       <PhoneStatusBar showConnectivity={false}/>
       <div className="flex items-center justify-between px-5 py-2">
         <button onClick={() => navigate("everydayTown")} style={{ color: "#7A7468" }}><ChevronLeft size={20}/></button>
-        <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-title)", fontWeight: 700 }}>Inventory</p>
+        <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-title)", fontWeight: 700 }}>My Agents</p>
         <button style={{ color: "#7A7468" }}><Search size={18}/></button>
       </div>
 
@@ -5820,56 +6195,86 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
           </div>
           <div className="grid grid-cols-2 gap-3 pb-4">
           {agentStyle === "dailySpirits" ? <>
-            {backendAgents.map(agent => {
-              const accent = agentAccent(agent.id);
-              return (
-              <button key={agent.id} onClick={() => onEditBackendAgent(agent)}
-                aria-label={`编辑 ${agent.name}`}
+            {capturedPets.filter(pet => pet.name !== "暹罗猫").map(pet => (
+              <button key={pet.id} onClick={() => navigate("everydayTown")}
+                aria-label={`查看 ${pet.name}`}
                 className="rounded-2xl overflow-hidden text-left"
                 style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
-                <div className="flex items-center justify-center relative" style={{ height: 90, background: accent + "12" }}>
-                  {agent.sprite_url ? (
-                    <motion.img src={agent.sprite_url} alt={agent.name} animate={{ y: [0, -3, 0] }}
-                      transition={{ duration: 2.4, repeat: Infinity }}
-                      style={{ width: 82, height: 82, objectFit: "contain" }}/>
-                  ) : (
-                    <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 2.4, repeat: Infinity }}
-                      style={{ fontSize: 54, lineHeight: 1 }}>{agent.emoji}</motion.span>
-                  )}
+                <div className="flex items-center justify-center relative" style={{ height: 90, background: "#E8634A12" }}>
+                  <motion.img src={pet.finalUrl} alt={pet.name} animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 2.4, repeat: Infinity }}
+                    style={{ width: 82, height: 82, objectFit: "contain" }}/>
                   <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
-                    style={{
-                      background: agent.in_world ? "#6B9E7A20" : accent + "20",
-                      color: agent.in_world ? "#6B9E7A" : accent,
-                      border: `1px solid ${agent.in_world ? "#6B9E7A40" : accent + "40"}`,
-                      fontSize: "var(--ui-font-caption)",
-                    }}>
-                    {agent.in_world ? "IN WORLD" : "READY"}
+                    style={{ background: "#E8634A20", color: "#E8634A", border: "1px solid #E8634A40", fontSize: "var(--ui-font-caption)" }}>
+                    本机 AGENT
                   </div>
-                  {agent.location === "plaza" && (
-                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{ background: "#4A7FA5" }}/>
-                  )}
                 </div>
                 <div className="p-2.5">
-                  <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{agent.name}</p>
-                  <p style={{ fontSize: "var(--ui-font-body)", color: accent, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{agent.category}</p>
-                  <p className="truncate mt-1" style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-                    {agent.trait}
-                  </p>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <span style={{ fontSize: "var(--ui-font-micro)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-                      {agent.location === "plaza" ? "⛲ 广场中" : agent.in_world ? "🏡 世界中" : "📦 待入驻"}
-                    </span>
-                    <span style={{ color: accent, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-caption)" }}>identity →</span>
+                  <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{pet.name}</p>
+                  <p style={{ fontSize: "var(--ui-font-body)", color: "#E8634A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{pet.role}</p>
+                  <p style={{ fontSize: "var(--ui-font-caption)", color: "#8E867A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>仅当前手机 · 刷新即清空</p>
+                  {pet.personality?.length ? (
+                    <p className="truncate mt-1" style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+                      {pet.personality.join(" · ")}
+                    </p>
+                  ) : null}
+                  <div className="flex items-center justify-between mt-1">
+                    <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{pet.world}</span>
+                    <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "VT323,monospace" }}>0 段记忆</span>
                   </div>
                 </div>
               </button>
-              );
-            })}
-            {backendAgents.length === 0 && (
-              <p style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)", gridColumn: "1 / -1", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-                还没有日常精灵——去 Capture 拍一张照片吧！
-              </p>
-            )}
+            ))}
+            {AGENT_PROFILES.map(a => (
+            <button key={a.id} onClick={() => onEditAgent(a.id)}
+              aria-label={`Edit ${drafts[a.id]?.name || a.name} settings`}
+              className="rounded-2xl overflow-hidden text-left"
+              style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
+              {/* Agent preview */}
+              <div className="flex items-center justify-center relative"
+                style={{ height: "90px", background: a.color + "12" }}>
+                <svg width="80" height="80" viewBox="-40 -40 80 80">
+                  {a.render(0.62, false)}
+                </svg>
+                {a.badge && (
+                  <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
+                    style={{ background: a.color + "20", color: a.color, border: `1px solid ${a.color}40`, fontSize: "var(--ui-font-caption)" }}>
+                    {a.badge}
+                  </div>
+                )}
+                {a.esp32 && (
+                  <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full flex items-center gap-0.5"
+                    style={{ background: "#1C1911", color: "white" }}>
+                    <Cpu size={8}/>
+                    <span style={{ fontSize: "var(--ui-font-caption)", fontFamily: "VT323,monospace" }}>ESP32</span>
+                  </div>
+                )}
+                {a.visiting && (
+                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{ background: "#E8191A" }}/>
+                )}
+              </div>
+              {/* Info */}
+              <div className="p-2.5">
+                <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{drafts[a.id]?.name || a.name}</p>
+                <p style={{ fontSize: "var(--ui-font-body)", color: a.color, fontFamily: "VT323,monospace" }}>{drafts[a.id]?.role || a.role}</p>
+                <div className="flex items-center justify-between mt-1">
+                  <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{a.world}</span>
+                  <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "VT323,monospace" }}>
+                    {a.memories} 段记忆
+                  </span>
+                </div>
+                {/* Original photo indicator */}
+                <div className="flex items-center gap-1 mt-1.5">
+                  <div className="w-4 h-4 rounded" style={{ background: a.color + "30", border: `1px solid ${a.color}40` }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16">
+                      <rect x="2" y="3" width="12" height="10" rx="1.5" fill={a.color + "40"} stroke={a.color + "60"} strokeWidth="0.7"/>
+                    </svg>
+                  </div>
+                  <span style={{ fontSize: "var(--ui-font-micro)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>已捕获物件</span>
+                </div>
+              </div>
+            </button>
+            ))}
           </> : styleAgents.map(asset => {
               const savedDraft = drafts[asset.type];
               return (
@@ -6562,7 +6967,7 @@ function BranchResolutionScreen({ navigate }: { navigate: (s: Screen) => void })
   );
 }
 
-type HomeScene = "worldDock" | "everyday" | "stardom" | "future";
+type HomeScene = "worldDock" | "everyday" | "stardom" | "future" | "creator" | "custom";
 type HomeView = "scene" | "civilization" | "plaza";
 
 function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; size?: number }) {
@@ -6577,24 +6982,6 @@ function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; 
     />
   );
 }
-
-const AGENT_ACCENTS = ["#E8634A", "#4A7FA5", "#6B9E7A", "#8A7A9A", "#D18A3D", "#B87872"];
-
-function agentAccent(id: number) {
-  return AGENT_ACCENTS[id % AGENT_ACCENTS.length];
-}
-
-function AgentPortrait({ agent, size = 120 }: { agent: BackendAgent; size?: number }) {
-  if (agent.sprite_url) {
-    return (
-      <img src={agent.sprite_url} alt={agent.name} draggable={false}
-        style={{ width: size, height: size, objectFit: "contain", imageRendering: "auto" }}/>
-    );
-  }
-  return <span style={{ fontSize: size * 0.62, lineHeight: 1 }}>{agent.emoji}</span>;
-}
-
-
 
 function SupervisedTrainingConsole() {
   const provider = useMemo(() => createSupervisedTrainingProvider(), []);
@@ -7334,325 +7721,31 @@ const SKILL_FORGE_LAYER_META = {
   governance: { color: "#8A7A9A", label: "GOVERNANCE" },
 } as const;
 
-type PlazaSceneMember = {
-  id: string;
-  name: string;
-  origin: string;
-  color: string;
-  art: React.ReactNode;
-};
-
-type PlazaEnvoyPosition = {
-  x: number;
-  y: number;
-  scale: number;
-  rotation: number;
-  flipX: boolean;
-  visible: boolean;
-  visiting: boolean;
-};
-
-type SkillPlazaPosition = {
-  x: number;
-  y: number;
-  scale: number;
-  detailed: boolean;
-  visible: boolean;
-};
-
-const PLAZA_ENVOY_WORLD_IDS = [
-  "w_aoye",
-  "w_duorou",
-  "w_tianliang",
-  "w_shendu",
-  "w_huoshan",
-  "w_wanjuzhan",
-] as const;
-
-function PlazaScenePanel({ members, skills, onOpenAgent, onOpenSkill }: {
-  members: PlazaSceneMember[];
-  skills: PlazaSkill[];
-  onOpenAgent: (agentId: string) => void;
-  onOpenSkill: (skillId: string) => void;
+function PlazaScreen({
+  sceneControl,
+  featuredHouses,
+  userHouse,
+  selectingHouse,
+  onSelectHouse,
+  onOpenUserWorld,
+  createdVisitor,
+  visitorArt,
+}: {
+  sceneControl: React.ReactNode;
+  featuredHouses: { houseId: string; label: string; worldName: string; color: string; onOpen: () => void }[];
+  userHouse?: { houseId: string; worldName: string; color: string } | null;
+  selectingHouse: boolean;
+  onSelectHouse: (houseId: string) => void;
+  onOpenUserWorld: () => void;
+  createdVisitor?: CreatedPlazaVisitor | null;
+  visitorArt?: React.ReactNode;
 }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [envoyPositions, setEnvoyPositions] = useState<Record<string, PlazaEnvoyPosition>>({});
-  const [connectionCount, setConnectionCount] = useState(0);
-  const [skillPlazaPosition, setSkillPlazaPosition] = useState<SkillPlazaPosition | null>(null);
-
-  useEffect(() => {
-    const receiveMapState = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
-      if (event.data?.type !== "forkworld:plaza-state") return;
-      setEnvoyPositions(event.data.envoys || {});
-      setConnectionCount(event.data.connections || 0);
-      setSkillPlazaPosition(event.data.skillPlaza || null);
-      setMapReady(true);
-    };
-    window.addEventListener("message", receiveMapState);
-    return () => window.removeEventListener("message", receiveMapState);
-  }, []);
-
-  return (
-    <div className="h-full min-h-0 overflow-hidden relative rounded-2xl"
-      style={{ background: "#F5F0E8", border: "1px solid rgba(28,25,17,.08)" }}>
-      <iframe
-        ref={iframeRef}
-        title="ForkWorld 完整世界地图"
-        src="/forkworld-map/global.html?bg=1&embed=1&external_agents=1&shell=5"
-        onLoad={() => setMapReady(true)}
-        style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:0, background:"#F5F0E8" }}
-      />
-
-      {!mapReady && (
-        <div style={{
-          position:"absolute", inset:0, zIndex:8, display:"grid", placeItems:"center",
-          background:"#F5F0E8", color:"#7A7468", fontSize:"var(--ui-font-caption)",
-        }}>
-          正在进入世界地图…
-        </div>
-      )}
-
-      {skillPlazaPosition?.visible && (
-        <div style={{
-          position: "absolute",
-          left: skillPlazaPosition.x,
-          top: skillPlazaPosition.y,
-          width: skillPlazaPosition.detailed ? 236 : 112,
-          height: skillPlazaPosition.detailed ? 196 : 48,
-          zIndex: 11,
-          pointerEvents: "none",
-          transform: `translate(-50%, -50%) scale(${skillPlazaPosition.scale})`,
-          transformOrigin: "center",
-        }}>
-          {skillPlazaPosition.detailed && skills.slice(0, 6).map((skill, index) => {
-            const positions = [
-              { left: 71, top: 4 },
-              { left: 140, top: 39 },
-              { left: 140, top: 127 },
-              { left: 71, top: 162 },
-              { left: 2, top: 127 },
-              { left: 2, top: 39 },
-            ];
-            const position = positions[index];
-            return (
-              <button
-                key={skill.id}
-                type="button"
-                onClick={() => onOpenSkill(skill.id)}
-                style={{
-                  position: "absolute",
-                  left: position.left,
-                  top: position.top,
-                  width: 94,
-                  minHeight: 30,
-                  padding: "5px 6px",
-                  borderRadius: 9,
-                  border: `1px solid ${skill.color}70`,
-                  background: "rgba(250,246,239,.96)",
-                  boxShadow: "0 2px 0 rgba(28,25,17,.1)",
-                  color: "#1C1911",
-                  cursor: "pointer",
-                  pointerEvents: "auto",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span style={{
-                  display: "inline-block",
-                  width: 5,
-                  height: 5,
-                  marginRight: 5,
-                  borderRadius: 2,
-                  background: skill.color,
-                  verticalAlign: 1,
-                }}/>
-                <span style={{ fontSize: "var(--ui-font-micro)" }}>{skill.name}</span>
-              </button>
-            );
-          })}
-
-          <button
-            type="button"
-            onClick={() => skills[0] && onOpenSkill(skills[0].id)}
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              width: skillPlazaPosition.detailed ? 112 : 112,
-              minHeight: skillPlazaPosition.detailed ? 54 : 48,
-              padding: "7px 8px",
-              transform: "translate(-50%, -50%)",
-              borderRadius: 13,
-              border: "1px solid rgba(74,127,165,.48)",
-              background: "rgba(250,246,239,.97)",
-              boxShadow: "0 3px 0 rgba(28,25,17,.12)",
-              color: "#1C1911",
-              cursor: "pointer",
-              pointerEvents: "auto",
-            }}
-          >
-            <span style={{
-              display: "block",
-              color: "#4A7FA5",
-              fontSize: "var(--ui-font-micro)",
-              letterSpacing: 1,
-            }}>
-              SKILL PLAZA
-            </span>
-            <span style={{
-              display: "block",
-              marginTop: 4,
-              fontSize: "var(--ui-font-caption)",
-            }}>
-              技能交换中心
-            </span>
-            {skillPlazaPosition.detailed && (
-              <span style={{
-                display: "block",
-                marginTop: 4,
-                color: "#6B9E7A",
-                fontSize: "var(--ui-font-micro)",
-              }}>
-                {skills.length} SKILLS · 点击学习
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-
-      {members.map((member, index) => {
-        const worldId = PLAZA_ENVOY_WORLD_IDS[index];
-        const position = worldId ? envoyPositions[worldId] : undefined;
-        if (!position?.visible) return null;
-        const scale = Math.max(.48, Math.min(1.25, position.scale));
-        return (
-          <button
-            key={member.id}
-            type="button"
-            onClick={() => onOpenAgent(member.id)}
-            style={{
-              position:"absolute",
-              left:position.x,
-              top:position.y,
-              width:72,
-              padding:0,
-              border:0,
-              background:"transparent",
-              color:member.color,
-              cursor:"pointer",
-              zIndex:12,
-              transform:`translate(-50%, -86%) rotate(${position.rotation}rad) scale(${position.flipX ? -scale : scale}, ${scale})`,
-              transformOrigin:"center bottom",
-              transition:"filter .15s ease",
-              filter:position.visiting ? `drop-shadow(0 0 7px ${member.color}99)` : "none",
-            }}
-            aria-label={`查看 ${member.name} 的 Agent 档案`}
-          >
-            <span className="flex justify-center">{member.art}</span>
-            <span style={{
-              display:"inline-block",
-              marginTop:-2,
-              padding:"2px 6px",
-              borderRadius:7,
-              background:"rgba(250,246,239,.92)",
-              border:`1px solid ${member.color}45`,
-              fontSize:"var(--ui-font-micro)",
-              whiteSpace:"nowrap",
-            }}>
-              {member.name}
-            </span>
-          </button>
-        );
-      })}
-
-      <div style={{
-        position: "absolute", left: 10, right: 10, top: 9, zIndex: 20,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "8px 10px", borderRadius: 12,
-        background: "rgba(250,246,239,.93)", border: "1px solid rgba(28,25,17,.1)",
-        backdropFilter: "blur(8px)",
-      }}>
-        <div>
-          <p style={{ color: "#4A7FA5", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>PUBLIC AGENT SQUARE</p>
-          <p style={{ fontSize: "var(--ui-font-caption)", marginTop: 4 }}>完整巡航 · 串门 · 共鸣连线</p>
-        </div>
-        <span style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)" }}>
-          ● {members.length} ONLINE · {connectionCount} LINK
-        </span>
-      </div>
-
-      <div style={{
-        position: "absolute", left: 10, bottom: 10, zIndex: 20,
-        width: 124, padding: "7px 8px 6px", borderRadius: 12,
-        background: "rgba(250,246,239,.92)", border: "1px solid rgba(28,25,17,.1)",
-        boxShadow: "0 3px 12px rgba(28,25,17,.08)",
-      }}>
-        <p style={{ color: "#8A8478", fontSize: "var(--ui-font-micro)", letterSpacing: 1.1, marginBottom: 5 }}>MAP LAYERS</p>
-        {[
-          ["Agents", "#4A7FA5"],
-          ["Skill Exchange", "#6B9E7A"],
-        ].map(([label, color]) => (
-          <div key={label} className="flex items-center gap-2" style={{ minHeight: 24, borderTop: "1px solid rgba(28,25,17,.06)" }}>
-            <span style={{ width: 22, height: 12, borderRadius: 7, background: `${color}2E`, border: `1px solid ${color}` }}>
-              <span style={{ display: "block", width: 7, height: 7, margin: "2px 0 0 12px", borderRadius: "50%", background: color }}/>
-            </span>
-            <span style={{ color: "#4D4941", fontSize: "var(--ui-font-micro)" }}>{label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const PLAZA_WORLD_LABEL: Record<string, string> = {
-  everyday: "Memory Town",
-  stardom: "Stardom",
-  future: "Future Colony",
-};
-
-type PlazaMember = {
-  id: string;
-  agentId: number;
-  name: string;
-  owner: string;
-  origin: string;
-  color: string;
-  isMine: boolean;
-  interests: string[];
-  art: React.ReactNode;
-};
-
-type PlazaCatalogEntry = {
-  id: string;
-  skillRowId: number;
-  name: string;
-  englishName: string;
-  category: string;
-  summary: string;
-  color: string;
-  version: string;
-  source: string;
-  capabilities: string[];
-  teacherIds: string[];
-  runnable: boolean;
-};
-
-function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
   const [plazaTab, setPlazaTab] = useState<"square" | "agents" | "skills">("square");
-  const [plazaAgents, setPlazaAgents] = useState<BackendAgent[]>([]);
-  const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [selectedLearnerId, setSelectedLearnerId] = useState("random");
-  const [learning, setLearning] = useState(false);
-  const [learnResult, setLearnResult] = useState<{
-    lines: DialogLine[];
-    learner: string;
-    teacher: string;
-    skill: string;
-  } | null>(null);
-  const [learnError, setLearnError] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState("atlas");
+  const [focusedPlazaAgentId, setFocusedPlazaAgentId] = useState<string | null>(null);
+  const [plazaFocusRequest, setPlazaFocusRequest] = useState(0);
+  const [selectedSkillId, setSelectedSkillId] = useState("route-mapping");
+  const [selectedLearnerId, setSelectedLearnerId] = useState("miko");
   const [forgePrompt, setForgePrompt] = useState("");
   const [forgeStatus, setForgeStatus] = useState<"idle" | "researching" | "review" | "published">("idle");
   const [forgeTrace, setForgeTrace] = useState<SkillForgeTraceEvent[]>([]);
@@ -7666,76 +7759,109 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
     evaluationPassed: number;
     evaluationTotal: number;
   } | null>(null);
-  const [forgeError, setForgeError] = useState("");
-  const [customSkills, setCustomSkills] = useState<PlazaCatalogEntry[]>([]);
+  const [customSkills, setCustomSkills] = useState<PlazaSkill[]>([]);
   const forgeRunRef = useRef(0);
-
-  const refreshPlaza = () => {
-    backendApi.plazaAgents().then(setPlazaAgents).catch(() => {});
-    backendApi.plazaSkills().then(setCatalog).catch(() => {});
-  };
-  useEffect(() => {
-    refreshPlaza();
-  }, []);
-
-  const members: PlazaMember[] = plazaAgents.map(a => ({
-    id: String(a.id),
-    agentId: a.id,
-    name: a.name,
-    owner: a.owner_id === ME_USER_ID ? "我" : a.owner_name,
-    origin: PLAZA_WORLD_LABEL[a.world] ?? a.world,
-    color: agentAccent(a.id),
-    isMine: a.owner_id === ME_USER_ID,
-    interests: [],
-    art: a.sprite_url
-      ? <img src={a.sprite_url} alt={a.name} draggable={false} style={{ width: 56, height: 58, objectFit: "contain" }}/>
-      : <span style={{ fontSize: 42, lineHeight: 1 }}>{a.emoji}</span>,
+  const [skillLoadouts, setSkillLoadouts] = useState<Record<string, string[]>>(() => ({
+    ...MY_AGENT_SKILL_LOADOUTS,
   }));
-
-  // 目录去重：同名技能合并，收集所有可教授的持有者
-  const dedupedSkills: PlazaCatalogEntry[] = [];
-  for (const row of catalog) {
-    const existing = dedupedSkills.find(entry => entry.name === row.name);
-    const holderId = row.holder ? String(row.holder.id) : null;
-    if (existing) {
-      if (holderId && !existing.teacherIds.includes(holderId)) existing.teacherIds.push(holderId);
-      continue;
-    }
-    dedupedSkills.push({
-      id: String(row.id),
-      skillRowId: row.id,
-      name: row.name,
-      englishName: row.def_id || row.kind,
-      category: row.category || "生活",
-      summary: row.summary,
-      color: AGENT_ACCENTS[dedupedSkills.length % AGENT_ACCENTS.length],
-      version: row.runnable ? "1.0" : "0.9",
-      source: row.holder ? `${row.holder.owner_name} · ${row.holder.name}` : "未知来源",
-      capabilities: row.capabilities.length > 0 ? row.capabilities : [row.summary].filter(Boolean),
-      teacherIds: holderId ? [holderId] : [],
-      runnable: row.runnable,
-    });
-  }
-  const allSkills: PlazaCatalogEntry[] = [
-    ...customSkills.filter(custom => !dedupedSkills.some(entry => entry.name === custom.name)),
-    ...dedupedSkills,
+  const baseMembers = [
+    {
+      id: "miko",
+      name: "Miko",
+      owner: "我",
+      origin: "Memory Town",
+      color: "#E8634A",
+      isMine: true,
+      interests: ["route-mapping", "shared-chronicle"],
+      art: (
+        <svg width="56" height="58" viewBox="-34 -38 68 76" aria-label="Miko">
+          <MugAgent x={0} y={7} s={1.05} accent="#E8634A" animated={false}/>
+        </svg>
+      ),
+    },
+    {
+      id: "shutter",
+      name: "Shutter",
+      owner: "我",
+      origin: "Memory Town",
+      color: "#4A7FA5",
+      isMine: true,
+      interests: ["boundary-sense", "fitness-companion"],
+      art: (
+        <svg width="56" height="58" viewBox="-34 -38 68 76" aria-label="Shutter">
+          <CameraAgent x={0} y={7} s={1.02} accent="#4A7FA5" animated={false}/>
+        </svg>
+      ),
+    },
+    {
+      id: "atlas",
+      name: "Atlas",
+      owner: "Noah",
+      origin: "Stardom",
+      color: "#579447",
+      isMine: false,
+      interests: ["shared-chronicle", "visual-archive"],
+      art: <PlazaStyleAgent type="blockCartographer" size={58}/>,
+    },
+    {
+      id: "ink",
+      name: "Ink",
+      owner: "Aya",
+      origin: "Future Colony",
+      color: "#6A6957",
+      isMine: false,
+      interests: ["visual-archive", "emotional-care"],
+      art: <PlazaStyleAgent type="lakeCat" size={56}/>,
+    },
+    {
+      id: "noct",
+      name: "Noct",
+      owner: "我",
+      origin: "Future Colony",
+      color: "#6A6957",
+      isMine: true,
+      interests: ["emotional-care", "boundary-sense"],
+      art: <PlazaStyleAgent type="lakeOwl" size={56}/>,
+    },
+    {
+      id: "ansel",
+      name: "Ansel",
+      owner: "Kai",
+      origin: "Pentiment",
+      color: "#8A543B",
+      isMine: false,
+      interests: ["route-mapping", "boundary-sense"],
+      art: <PlazaStyleAgent type="pentimentIlluminator" size={62}/>,
+    },
   ];
-
-  const agentSkillRows = (memberId: string) => catalog.filter(row => row.holder && String(row.holder.id) === memberId);
-
+  const members = createdVisitor ? [
+    ...baseMembers,
+    {
+      id: createdVisitor.id,
+      name: createdVisitor.agentName,
+      owner: "我",
+      origin: `Plaza 游客 · ${getPlazaSkill(createdVisitor.skillId)?.name ?? "Skill"}学习中`,
+      color: "#E8634A",
+      isMine: true,
+      interests: [createdVisitor.skillId],
+      art: visitorArt ?? <PlazaStyleAgent type="blockCourier" size={58}/>,
+    },
+  ] : baseMembers;
+  const allSkills = [...customSkills, ...PLAZA_SKILLS];
   const publicAgents = members.filter(member => !member.isMine);
   const myAgents = members.filter(member => member.isMine);
-  const selectedAgent = members.find(member => member.id === selectedAgentId) || publicAgents[0] || members[0] || null;
-  const selectedSkill = allSkills.find(skill => skill.id === selectedSkillId) || allSkills[0] || null;
-  const skillTeachers = selectedSkill
-    ? selectedSkill.teacherIds
-        .map(id => members.find(member => member.id === id))
-        .filter((member): member is PlazaMember => Boolean(member))
-    : [];
-  const selectedLearner = myAgents.find(member => member.id === selectedLearnerId) || null;
-  const learnerHasSkill = Boolean(
-    selectedSkill && selectedLearner && agentSkillRows(selectedLearner.id).some(row => row.name === selectedSkill.name),
-  );
+  const selectedAgent = members.find(member => member.id === selectedAgentId) || publicAgents[0];
+  const selectedSkill = allSkills.find(skill => skill.id === selectedSkillId) || allSkills[0];
+  const selectedAgentBindings = getAgentSkillBindings(selectedAgent.id);
+  const selectedAgentMastered = selectedAgentBindings.filter(binding => binding.state === "mastered");
+  const selectedAgentLearning = selectedAgentBindings.filter(binding => binding.state === "learning");
+  const skillTeachers = PLAZA_AGENT_SKILL_BINDINGS
+    .filter(binding => binding.skillId === selectedSkill.id && binding.state === "mastered")
+    .map(binding => members.find(member => member.id === binding.agentId))
+    .filter((member): member is typeof members[number] => Boolean(member));
+  const selectedLearner = myAgents.find(member => member.id === selectedLearnerId) || myAgents[0];
+  const learnerIsInterested = selectedLearner.interests.includes(selectedSkill.id);
+  const learnerHasSkill = skillLoadouts[selectedLearner.id]?.includes(selectedSkill.id) ?? false;
 
   useEffect(() => () => {
     forgeRunRef.current += 1;
@@ -7743,32 +7869,14 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
 
   const chooseSkill = (skillId: string) => {
     setSelectedSkillId(skillId);
-    setLearnResult(null);
-    setLearnError("");
   };
 
-  const learnSelectedSkill = async () => {
-    if (!selectedSkill || learning || learnerHasSkill) return;
-    setLearning(true);
-    setLearnError("");
-    setLearnResult(null);
-    try {
-      const result = await backendApi.learn(
-        selectedSkill.skillRowId,
-        selectedLearnerId === "random" ? undefined : Number(selectedLearnerId),
-      );
-      setLearnResult({
-        lines: result.lines,
-        learner: result.learner.name,
-        teacher: result.teacher.name,
-        skill: result.skill,
-      });
-      refreshPlaza();
-    } catch (error) {
-      setLearnError(error instanceof Error ? error.message : "学习失败了");
-    } finally {
-      setLearning(false);
-    }
+  const loadSelectedSkill = () => {
+    if (learnerHasSkill) return;
+    setSkillLoadouts(current => ({
+      ...current,
+      [selectedLearner.id]: [...(current[selectedLearner.id] || []), selectedSkill.id],
+    }));
   };
 
   const startSkillForge = async () => {
@@ -7781,64 +7889,22 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
     setForgeDraft(null);
     setForgeManifest(null);
     setForgeMetrics(null);
-    setForgeError("");
 
-    // 视觉轨迹（本地演出）与真实锻造（后端 skill-forge）同时进行
-    const [harness, real] = await Promise.all([
-      runSkillForgeHarness(prompt, events => {
-        if (forgeRunRef.current === runId) setForgeTrace(events);
-      }),
-      backendApi.forge(prompt).catch(error => {
-        if (forgeRunRef.current === runId) {
-          setForgeError(error instanceof Error ? error.message : "锻造失败");
-        }
-        return null;
-      }),
-    ]);
-    if (forgeRunRef.current !== runId) return;
-    setForgeManifest(harness.manifest);
-    setForgeMetrics(harness.metrics);
-    if (real) {
-      setForgeDraft({
-        id: real.manifest.def_id,
-        name: `${real.manifest.emoji} ${real.manifest.name}`,
-        englishName: real.manifest.def_id,
-        category: real.manifest.category,
-        summary: real.manifest.description,
-        color: "#D18A3D",
-        version: "0.1",
-        source: `锻造于 ${real.agent.name}`,
-        capabilities: real.manifest.capabilities ?? [],
-      });
-      setCustomSkills(current => [
-        {
-          id: `forged-${real.skill.id}`,
-          skillRowId: real.skill.id,
-          name: real.skill.name,
-          englishName: real.manifest.def_id,
-          category: real.manifest.category,
-          summary: real.manifest.description,
-          color: "#D18A3D",
-          version: "0.1",
-          source: `我 · ${real.agent.name}`,
-          capabilities: real.manifest.capabilities ?? [],
-          teacherIds: [String(real.agent.id)],
-          runnable: true,
-        },
-        ...current.filter(entry => entry.skillRowId !== real.skill.id),
-      ]);
-      setForgeStatus("review");
-      refreshPlaza();
-    } else {
-      setForgeDraft(harness.skill);
+    const result = await runSkillForgeHarness(prompt, events => {
+      if (forgeRunRef.current === runId) setForgeTrace(events);
+    });
+    if (forgeRunRef.current === runId) {
+      setForgeDraft(result.skill);
+      setForgeManifest(result.manifest);
+      setForgeMetrics(result.metrics);
       setForgeStatus("review");
     }
   };
 
   const publishForgedSkill = () => {
     if (!forgeDraft) return;
-    const published = customSkills[0];
-    if (published) setSelectedSkillId(published.id);
+    setCustomSkills(current => [forgeDraft, ...current.filter(skill => skill.id !== forgeDraft.id)]);
+    setSelectedSkillId(forgeDraft.id);
     setForgeStatus("published");
   };
 
@@ -7848,14 +7914,16 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
 
       <div className="px-4 pt-1 pb-2 flex items-end justify-between">
         <div>
-          <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700 }}>Public Plaza</p>
+          <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700 }}>
+            {selectingHouse ? "Choose a Plaza Home" : "Public Plaza"}
+          </p>
           <p style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", marginTop: 3 }}>
-            发现别人的智能体，加载他们愿意分享的 Skills
+            {selectingHouse ? "选择一栋发光的空房，选中后自动返回创建流程" : "发现别人的智能体，加载他们愿意分享的 Skills"}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#6B9E7A" }}/>
-          <span style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A" }}>{members.length} ONLINE</span>
+          <span style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A" }}>6 ONLINE</span>
         </div>
       </div>
 
@@ -7895,20 +7963,14 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               <Radio size={10} color="#6B9E7A"/>
               <span style={{ fontSize: "var(--ui-font-micro)", letterSpacing: 1, color: "#6B9E7A" }}>LIVE LEARNING</span>
             </div>
-            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>{learnResult ? "对话完成" : learning ? "教学中…" : "等待发起"}</span>
+            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>模仿练习 · 68%</span>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
-            {learnResult ? (
-              <>
-                <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>{learnResult.teacher}</span>
-                <ArrowRight size={10} color="#8E867A"/>
-                <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>{learnResult.skill}</span>
-                <ArrowRight size={10} color="#8E867A"/>
-                <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>{learnResult.learner}</span>
-              </>
-            ) : (
-              <span style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)" }}>在 Skills 页选一个技能，让你的伙伴去交流学习</span>
-            )}
+            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>Atlas</span>
+            <ArrowRight size={10} color="#8E867A"/>
+            <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>路线测绘</span>
+            <ArrowRight size={10} color="#8E867A"/>
+            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>Miko</span>
           </div>
         </div>
       )}
@@ -7916,9 +7978,16 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
       <div className="flex-1 min-h-0 px-4 pb-3 flex flex-col gap-2">
         <div className={`flex-1 min-h-0 ${plazaTab === "square" ? "overflow-hidden" : "overflow-y-auto"}`}>
           {plazaTab === "square" ? (
-            <PlazaScenePanel
+            <WebPlazaScene
               members={members}
               skills={allSkills}
+              featuredHouses={featuredHouses}
+              userHouse={userHouse}
+              selectingHouse={selectingHouse}
+              onSelectHouse={onSelectHouse}
+              onOpenUserWorld={onOpenUserWorld}
+              focusMemberId={focusedPlazaAgentId}
+              focusRequest={plazaFocusRequest}
               onOpenAgent={agentId => {
                 setSelectedAgentId(agentId);
                 setPlazaTab("agents");
@@ -7938,14 +8007,18 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>来自 3 个世界</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {members.map(member => {
-                  const memberSkills = agentSkillRows(member.id);
-                  const active = selectedAgent?.id === member.id;
+                {publicAgents.map(member => {
+                  const mastered = getAgentSkillBindings(member.id).filter(binding => binding.state === "mastered");
+                  const active = selectedAgent.id === member.id;
                   return (
                     <button
                       key={member.id}
                       type="button"
-                      onClick={() => setSelectedAgentId(member.id)}
+                      onClick={() => {
+                        setSelectedAgentId(member.id);
+                        const firstSkill = mastered[0]?.skillId;
+                        if (firstSkill) chooseSkill(firstSkill);
+                      }}
                       className="rounded-2xl px-2 pt-2 pb-2 text-left"
                       style={{
                         background: active ? `${member.color}10` : "#FAF6EF",
@@ -7958,25 +8031,22 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                       <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", fontWeight: 700, marginTop: 6 }}>{member.name}</p>
                       <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>@{member.owner} · {member.origin}</p>
                       <div className="mt-2">
-                        {memberSkills.slice(0, 1).map(row => (
-                          <span key={row.id} className="inline-flex rounded-full px-1.5 py-1 max-w-full"
-                            style={{ color: member.color, background: `${member.color}12`, fontSize: "var(--ui-font-micro)" }}>
-                            <span className="truncate">{row.name}</span>
-                          </span>
-                        ))}
-                        {memberSkills.length === 0 && (
-                          <span style={{ color: "#B4AC9F", fontSize: "var(--ui-font-micro)" }}>还没有技能</span>
-                        )}
+                        {mastered.slice(0, 1).map(binding => {
+                          const skill = getPlazaSkill(binding.skillId);
+                          if (!skill) return null;
+                          return (
+                            <span key={skill.id} className="inline-flex rounded-full px-1.5 py-1"
+                              style={{ color: skill.color, background: `${skill.color}12`, fontSize: "var(--ui-font-micro)" }}>
+                              {skill.name} · {binding.proficiency}
+                            </span>
+                          );
+                        })}
                       </div>
                     </button>
                   );
                 })}
-                {members.length === 0 && (
-                  <p style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)", gridColumn: "1 / -1" }}>广场上还没有伙伴。</p>
-                )}
               </div>
 
-              {selectedAgent && (
               <motion.div
                 key={selectedAgent.id}
                 initial={{ opacity: 0, y: 5 }}
@@ -7987,41 +8057,63 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>{selectedAgent.name} 的 Skill 档案</p>
-                    <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>@{selectedAgent.owner} · 来自 {selectedAgent.origin}</p>
+                    <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>Skill 与角色分开保存，可替换、升级和回滚</p>
                   </div>
                   <Share2 size={13} color={selectedAgent.color}/>
                 </div>
                 <div className="mt-2">
                   <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>已掌握 · 可教授</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {agentSkillRows(selectedAgent.id).map(row => {
-                      const entry = allSkills.find(item => item.name === row.name);
-                      const entryColor = entry?.color ?? selectedAgent.color;
-                      const isChosen = selectedSkill != null && entry != null && selectedSkill.id === entry.id;
+                    {selectedAgentMastered.map(binding => {
+                      const skill = getPlazaSkill(binding.skillId);
+                      if (!skill) return null;
                       return (
                         <button
-                          key={row.id}
+                          key={skill.id}
                           type="button"
-                          onClick={() => entry && chooseSkill(entry.id)}
+                          onClick={() => chooseSkill(skill.id)}
                           className="rounded-full px-2 py-1.5"
                           style={{
-                            background: isChosen ? entryColor : `${entryColor}12`,
-                            color: isChosen ? "white" : entryColor,
-                            border: `1px solid ${entryColor}35`,
+                            background: selectedSkill.id === skill.id ? skill.color : `${skill.color}12`,
+                            color: selectedSkill.id === skill.id ? "white" : skill.color,
+                            border: `1px solid ${skill.color}35`,
                             fontSize: "var(--ui-font-micro)",
                           }}
                         >
-                          {row.name}{row.runnable ? " · ⚡可执行" : ""}
+                          {skill.name} · 熟练度 {binding.proficiency}
                         </button>
                       );
                     })}
-                    {agentSkillRows(selectedAgent.id).length === 0 && (
-                      <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>这位伙伴还没有可教授的技能。</span>
-                    )}
                   </div>
                 </div>
+                {selectedAgentLearning.length > 0 && (
+                  <div className="mt-2">
+                    <span style={{ color: "#4A7FA5", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>正在学习</span>
+                    <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginLeft: 8 }}>
+                      {getPlazaSkill(selectedAgentLearning[0].skillId)?.name} · {selectedAgentLearning[0].proficiency}%
+                    </span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFocusedPlazaAgentId(selectedAgent.id);
+                    setPlazaFocusRequest(current => current + 1);
+                    setPlazaTab("square");
+                  }}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5"
+                  style={{
+                    color: selectedAgent.color,
+                    background: `${selectedAgent.color}10`,
+                    border: `1.5px solid ${selectedAgent.color}45`,
+                    fontSize: "var(--ui-font-caption)",
+                  }}
+                >
+                  <MapPin size={13}/>
+                  去广场看他
+                  <ArrowRight size={12}/>
+                </button>
               </motion.div>
-              )}
             </div>
           ) : (
             <div>
@@ -8091,11 +8183,6 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                     {forgeStatus === "researching" ? "研究中…" : "开始研究"}
                   </button>
                 </div>
-                {forgeError && (
-                  <p style={{ color: "#E8634A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
-                    ⚠ 云端锻造失败（{forgeError}），以下为本地草稿预览
-                  </p>
-                )}
 
                 <AnimatePresence>
                   {forgeTrace.length > 0 && (
@@ -8316,8 +8403,10 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {allSkills.map(skill => {
-                  const active = selectedSkill != null && skill.id === selectedSkill.id;
-                  const teacherCount = skill.teacherIds.length;
+                  const active = skill.id === selectedSkill.id;
+                  const teacherCount = PLAZA_AGENT_SKILL_BINDINGS.filter(
+                    binding => binding.skillId === skill.id && binding.state === "mastered",
+                  ).length;
                   return (
                     <button
                       key={skill.id}
@@ -8350,7 +8439,7 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
           )}
         </div>
 
-        {plazaTab === "skills" && selectedSkill && (
+        {plazaTab !== "square" && (
           <div className="rounded-2xl p-3 shrink-0"
             style={{ background: "#FAF6EF", border: `1.5px solid ${selectedSkill.color}40`, boxShadow: "0 5px 18px rgba(28,25,17,.07)" }}>
           <div className="flex items-start justify-between gap-3">
@@ -8381,32 +8470,12 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               </span>
             ))}
           </div>
-          <AnimatePresence>
-            {learnResult && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden">
-                <div className="rounded-xl p-2.5 mt-2 flex flex-col gap-1.5" style={{ background: "#EEF3EC", border: "1px solid rgba(107,158,122,.25)" }}>
-                  {learnResult.lines.map((line, index) => (
-                    <p key={index} style={{ color: "#4A5A4C", fontSize: "var(--ui-font-caption)", lineHeight: 1.6 }}>
-                      <span style={{ fontWeight: 700 }}>{line.emoji} {line.name}：</span>{line.text}
-                    </p>
-                  ))}
-                  <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>
-                    ✓ {learnResult.learner} 学会了「{learnResult.skill}」，已写入记忆
-                  </p>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {learnError && (
-            <p style={{ color: "#E8634A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>⚠ {learnError}</p>
-          )}
           <div className="grid grid-cols-[112px_1fr] gap-2 mt-2">
             <div className="relative rounded-xl flex items-center px-2"
               style={{ height: 34, background: "#F0EBE2", border: "1px solid rgba(28,25,17,.08)" }}>
               <select
                 aria-label="选择学习这个 Skill 的智能体"
-                value={selectedLearnerId}
+                value={selectedLearner.id}
                 onChange={event => setSelectedLearnerId(event.target.value)}
                 style={{
                   width: "100%",
@@ -8415,19 +8484,18 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                   background: "transparent",
                   border: 0,
                   outline: 0,
-                  color: selectedLearner?.color ?? "#6F685D",
+                  color: selectedLearner.color,
                   fontSize: "var(--ui-font-caption)",
                 }}
               >
-                <option value="random">🎲 随机一位</option>
                 {myAgents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
               </select>
               <ChevronDown size={10} style={{ position: "absolute", right: 8, pointerEvents: "none", color: "#8E867A" }}/>
             </div>
             <button
               type="button"
-              onClick={learnSelectedSkill}
-              disabled={learnerHasSkill || learning}
+              onClick={loadSelectedSkill}
+              disabled={learnerHasSkill}
               className="rounded-xl flex items-center justify-center gap-1.5"
               style={{
                 height: 34,
@@ -8437,15 +8505,324 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 fontSize: "var(--ui-font-caption)",
               }}
             >
-              {learning ? <Loader2 size={11} className="animate-spin"/> : learnerHasSkill ? <Check size={11}/> : <Plus size={11}/>}
-              {learning ? "对话学习中…" : learnerHasSkill ? "已掌握这个技能" : "派伙伴去对话学习"}
+              {learnerHasSkill ? <Check size={11}/> : <Plus size={11}/>}
+              {learnerHasSkill ? "已加载到智能体" : learnerIsInterested ? "感兴趣 · 请求学习" : "加载并请求学习"}
             </button>
           </div>
-          <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
-            {selectedLearnerId === "random"
-              ? "会随机派一位在广场上的伙伴，去找技能持有者当面请教。"
-              : `${selectedLearner?.name ?? "伙伴"} 会去找技能持有者当面请教，学会后写入自己的记忆。`}
+          <p style={{ color: learnerIsInterested ? selectedSkill.color : "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
+            {learnerIsInterested
+              ? `${selectedLearner.name} 对这个 Skill 有较高兴趣，会主动与分享者交流。`
+              : `加载只创建独立绑定，不会改变 ${selectedLearner.name} 的人格与原始记忆。`}
           </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const WORLD_CREATOR_THEME_META: Record<ThemedWorldKey, { label: string; note: string; icon: React.ReactNode }> = {
+  fitness: { label: "活力研究", note: "可爱日常精灵 · 健身房", icon: <Dumbbell size={18}/> },
+  learning: { label: "开放学习", note: "像素住民 · 主题学校", icon: <BookOpen size={18}/> },
+  maker: { label: "创想工坊", note: "绣湖动物 · 神秘工坊", icon: <Hammer size={18}/> },
+};
+
+function WorldCreatorAgentArt({ agentId, capturedPets, size = 76 }: { agentId: string; capturedPets: PetAsset[]; size?: number }) {
+  const captured = capturedPets.find(pet => pet.id === agentId);
+  if (captured) {
+    return <img src={captured.finalUrl} alt={captured.name} draggable={false} style={{ width: size, height: size, objectFit: "contain" }}/>;
+  }
+  if (agentId === "dotti") {
+    return <img src={petDachshundPng} alt="Dotti" draggable={false} style={{ width: size + 12, height: size, objectFit: "contain" }}/>;
+  }
+  if (agentId === "atlas") return <PlazaStyleAgent type="blockCartographer" size={size}/>;
+  if (agentId === "corvus") return <PlazaStyleAgent type="lakeCrow" size={size}/>;
+  const profile = AGENT_PROFILES.find(agent => agent.id === agentId) ?? AGENT_PROFILES[0];
+  return <svg width={size} height={size} viewBox="-34 -34 68 68">{profile.render(.72, false)}</svg>;
+}
+
+function WorldCreatorScreen({
+  draft,
+  step,
+  capturedPets,
+  sceneControl,
+  onChange,
+  onStep,
+  onChooseHouse,
+  onCapture,
+  onComplete,
+  onExit,
+}: {
+  draft: WorldCreatorDraft;
+  step: WorldCreatorStep;
+  capturedPets: PetAsset[];
+  sceneControl: React.ReactNode;
+  onChange: (patch: Partial<WorldCreatorDraft>) => void;
+  onStep: (step: WorldCreatorStep) => void;
+  onChooseHouse: () => void;
+  onCapture: () => void;
+  onComplete: () => void;
+  onExit: () => void;
+}) {
+  const residentSteps: WorldCreatorStep[] = ["identity", "agent", "house", "theme", "npcs", "topic"];
+  const visitorSteps: WorldCreatorStep[] = ["identity", "agent", "skills"];
+  const steps = draft.identity === "visitor" ? visitorSteps : residentSteps;
+  const currentStepIndex = Math.max(0, steps.indexOf(step));
+  const presetAgents = [
+    { id: "dotti", name: "Dotti", role: "活力向导" },
+    { id: "miko", name: "Miko", role: "日常记录员" },
+    { id: "atlas", name: "Atlas", role: "像素规划员" },
+    { id: "corvus", name: "Corvus", role: "神秘观察员" },
+  ];
+  const goPrevious = () => {
+    if (step === "identity") {
+      onExit();
+      return;
+    }
+    const previous = steps[Math.max(0, currentStepIndex - 1)];
+    onStep(previous);
+  };
+  const selectedSkill = PLAZA_SKILLS.find(skill => skill.id === draft.skillId) ?? PLAZA_SKILLS[0];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden" style={{ background: "#F5F0E8", color: "#1C1911" }}>
+      <PhoneStatusBar/>
+      <div className="flex items-center justify-between px-4 pt-1">
+        <button type="button" onClick={goPrevious} className="flex items-center gap-1 rounded-xl px-2 py-2"
+          style={{ color: "#7A7468", border: "1px solid rgba(28,25,17,.1)", background: "#FAF6EF" }}>
+          <ChevronLeft size={15}/><span style={{ fontSize: "var(--ui-font-caption)" }}>返回</span>
+        </button>
+        {sceneControl}
+      </div>
+
+      <div className="px-5 pt-3">
+        <p style={{ color: "#E8634A", fontSize: "var(--ui-font-micro)", letterSpacing: 1.2 }}>CREATE YOUR AGENT WORLD</p>
+        <h1 style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-display)", lineHeight: 1, fontWeight: 700, marginTop: 5 }}>
+          {draft.identity === "visitor" ? "加入广场学习" : "创建自己的世界"}
+        </h1>
+        <div className="mt-3 flex gap-1.5">
+          {steps.map((item, index) => (
+            <span key={item} style={{
+              height: 5,
+              flex: 1,
+              borderRadius: 999,
+              background: index <= currentStepIndex ? "#E8634A" : "#DDD8CF",
+            }}/>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+        {step === "identity" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>你想以什么身份进入？</p>
+            <p style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", marginTop: 5 }}>两种身份使用不同的世界链路，之后仍可以重新创建。</p>
+            <div className="mt-4 grid gap-3">
+              {([
+                ["resident", "Plaza 住民", "选择一栋房子，建立主题建筑，并召集 NPC 子智能体共同研究。", <Home size={24}/>, "#E8634A"],
+                ["visitor", "广场游客", "不占房、不设主题空间，直接在中央广场游荡并学习 Skill。", <Compass size={24}/>, "#4A7FA5"],
+              ] as const).map(([identity, label, note, icon, color]) => {
+                const selected = draft.identity === identity;
+                return (
+                  <button key={identity} type="button" onClick={() => onChange({ identity })}
+                    className="rounded-2xl p-4 text-left"
+                    style={{ background: selected ? `${color}12` : "#FAF6EF", border: `2px solid ${selected ? color : "rgba(28,25,17,.1)"}` }}>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color, background: `${color}16` }}>{icon}</span>
+                    <strong className="mt-3 block" style={{ fontSize: "var(--ui-font-section)" }}>{label}</strong>
+                    <span className="mt-2 block" style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", lineHeight: 1.55 }}>{note}</span>
+                    {selected && <span className="mt-3 inline-flex items-center gap-1 rounded-full px-2 py-1" style={{ color, background: "#FAF6EF", fontSize: "var(--ui-font-micro)" }}><Check size={11}/> 已选择</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => onStep("agent")} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: "#1C1911", fontSize: "var(--ui-font-label)" }}>下一步：创建智能体 →</button>
+          </div>
+        )}
+
+        {step === "agent" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>选择你的主智能体</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl p-1" style={{ background: "#EAE5DA" }}>
+              {([
+                ["preset", "使用预设"],
+                ["photo", "拍照生成"],
+              ] as const).map(([mode, label]) => (
+                <button key={mode} type="button" onClick={() => {
+                  const firstCaptured = capturedPets[0];
+                  onChange(mode === "photo"
+                    ? { agentMode: mode, agentId: firstCaptured?.id ?? "", agentName: firstCaptured?.name ?? "" }
+                    : { agentMode: mode, agentId: "dotti", agentName: "Dotti" });
+                }} className="rounded-xl py-2.5"
+                  style={{ color: draft.agentMode === mode ? "white" : "#7A7468", background: draft.agentMode === mode ? "#E8634A" : "transparent" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {draft.agentMode === "preset" ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {presetAgents.map(agent => {
+                  const selected = draft.agentId === agent.id;
+                  return (
+                    <button key={agent.id} type="button" onClick={() => onChange({ agentId: agent.id, agentName: agent.name })}
+                      className="rounded-2xl p-3"
+                      style={{ background: selected ? "#FFF7F2" : "#FAF6EF", border: `2px solid ${selected ? "#E8634A" : "rgba(28,25,17,.1)"}` }}>
+                      <div className="flex h-20 items-center justify-center"><WorldCreatorAgentArt agentId={agent.id} capturedPets={capturedPets}/></div>
+                      <strong className="block">{agent.name}</strong>
+                      <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>{agent.role}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-3">
+                {capturedPets.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {capturedPets.map(pet => {
+                      const selected = draft.agentId === pet.id;
+                      return (
+                        <button key={pet.id} type="button" onClick={() => onChange({ agentId: pet.id, agentName: pet.name })}
+                          className="rounded-2xl p-3"
+                          style={{ background: "#FAF6EF", border: `2px solid ${selected ? "#E8634A" : "rgba(28,25,17,.1)"}` }}>
+                          <div className="flex h-20 items-center justify-center"><WorldCreatorAgentArt agentId={pet.id} capturedPets={capturedPets}/></div>
+                          <strong className="block truncate">{pet.name}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <button type="button" onClick={onCapture} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl py-4"
+                  style={{ color: "#E8634A", background: "#FAF6EF", border: "1.5px dashed #E8634A" }}>
+                  <Camera size={18}/>{capturedPets.length ? "再拍一个喜欢的东西" : "拍照或从相册选择喜欢的东西"}
+                </button>
+              </div>
+            )}
+            <button type="button" disabled={!draft.agentId} onClick={() => onStep(draft.identity === "visitor" ? "skills" : "house")}
+              className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: draft.agentId ? "#1C1911" : "#C8C2B4", fontSize: "var(--ui-font-label)" }}>
+              {draft.identity === "visitor" ? "下一步：选择 Skill →" : "下一步：选择 Plaza 房子 →"}
+            </button>
+          </div>
+        )}
+
+        {step === "house" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>在 Plaza 选择住处</p>
+            <div className="mt-4 rounded-3xl p-5 text-center" style={{ background: "#FAF6EF", border: `2px solid ${draft.houseId ? "#6B9E7A" : "rgba(28,25,17,.12)"}` }}>
+              <Home size={34} color={draft.houseId ? "#6B9E7A" : "#8E867A"} className="mx-auto"/>
+              <strong className="mt-3 block" style={{ fontSize: "var(--ui-font-section)" }}>{draft.houseId ? `${draft.houseId} 已为你预留` : "还没有选择房子"}</strong>
+              <span className="mt-2 block" style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", lineHeight: 1.5 }}>
+                点击后会跳到 Plaza 大地图；选择发光空房后自动回到这里。
+              </span>
+              <button type="button" onClick={onChooseHouse} className="mt-4 rounded-xl px-4 py-3"
+                style={{ color: "white", background: "#4A7FA5" }}>{draft.houseId ? "更换 Plaza 房子" : "前往 Plaza 选房"} <ArrowRight size={13} className="inline"/></button>
+            </div>
+            <button type="button" disabled={!draft.houseId} onClick={() => onStep("theme")} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: draft.houseId ? "#1C1911" : "#C8C2B4" }}>下一步：空间主题 →</button>
+          </div>
+        )}
+
+        {step === "theme" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>选择空间与中央建筑主题</p>
+            <div className="mt-3 grid gap-2">
+              {(Object.keys(WORLD_CREATOR_THEME_META) as ThemedWorldKey[]).map(key => {
+                const meta = WORLD_CREATOR_THEME_META[key];
+                const config = THEMED_WORLDS[key];
+                const selected = draft.themeKey === key;
+                return (
+                  <button key={key} type="button" onClick={() => onChange({ themeKey: key })}
+                    className="flex items-center gap-3 rounded-2xl p-3 text-left"
+                    style={{ background: selected ? `${config.accent}12` : "#FAF6EF", border: `2px solid ${selected ? config.accent : "rgba(28,25,17,.1)"}` }}>
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ color: config.accent, background: `${config.accent}15` }}>{meta.icon}</span>
+                    <span className="min-w-0 flex-1"><strong className="block">{meta.label}</strong><small style={{ color: "#7A7468" }}>{meta.note}</small></span>
+                    {selected && <Check size={16} color={config.accent}/>}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="mt-4 block" style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)" }}>
+              世界名称
+              <input value={draft.worldName} onChange={event => onChange({ worldName: event.target.value })} className="mt-2 w-full rounded-xl px-3 py-3"
+                style={{ color: "#1C1911", background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,.14)", outline: "none" }}/>
+            </label>
+            <button type="button" onClick={() => onStep("npcs")} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: "#1C1911" }}>下一步：NPC 形象 →</button>
+          </div>
+        )}
+
+        {step === "npcs" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>选择子智能体的形象体系</p>
+            <p style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", marginTop: 5 }}>初始生成 3 个持续游荡、对话并协作研究的 NPC。</p>
+            <div className="mt-4 grid gap-3">
+              {(Object.keys(WORLD_CREATOR_THEME_META) as ThemedWorldKey[]).map(key => {
+                const meta = WORLD_CREATOR_THEME_META[key];
+                const config = THEMED_WORLDS[key];
+                const sample = getThemedWorldResidents()[key].slice(0, 4);
+                const selected = draft.npcStyle === key;
+                return (
+                  <button key={key} type="button" onClick={() => onChange({ npcStyle: key })}
+                    className="rounded-2xl p-3 text-left"
+                    style={{ background: "#FAF6EF", border: `2px solid ${selected ? config.accent : "rgba(28,25,17,.1)"}` }}>
+                    <div className="flex h-16 items-end justify-around">{sample.map(agent => <span key={agent.id} className="flex h-16 w-14 items-center justify-center">{agent.art}</span>)}</div>
+                    <div className="mt-2 flex items-center justify-between"><strong>{meta.note.split(" · ")[0]}</strong>{selected && <Check size={15} color={config.accent}/>}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => onStep("topic")} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: "#1C1911" }}>下一步：研究主题 →</button>
+          </div>
+        )}
+
+        {step === "topic" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>这些子智能体要研究什么？</p>
+            <p style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", marginTop: 5, lineHeight: 1.5 }}>主题会决定中央建筑名称、循环对话和学习记录链。</p>
+            <textarea value={draft.topic} onChange={event => onChange({ topic: event.target.value })} rows={4}
+              className="mt-4 w-full resize-none rounded-2xl p-3"
+              style={{ color: "#1C1911", background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,.14)", outline: "none", lineHeight: 1.6 }}/>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["科学训练与恢复", "儿童如何建立好奇心", "可持续材料与修复", "如何培养长期专注力"].map(topic => (
+                <button key={topic} type="button" onClick={() => onChange({ topic })} className="rounded-full px-2.5 py-2"
+                  style={{ color: "#7A7468", background: "#FAF6EF", border: "1px solid rgba(28,25,17,.12)", fontSize: "var(--ui-font-caption)" }}>{topic}</button>
+              ))}
+            </div>
+            <div className="mt-4 rounded-2xl p-3" style={{ background: "#EEF3EC", border: "1px solid rgba(107,158,122,.25)" }}>
+              <span style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)" }}>READY TO EVOLVE</span>
+              <strong className="mt-2 block">{draft.worldName || "我的主题世界"} · {draft.houseId}</strong>
+              <small className="mt-1 block" style={{ color: "#7A7468", lineHeight: 1.5 }}>{draft.topic || "等待输入研究主题"}</small>
+            </div>
+            <button type="button" disabled={!draft.topic.trim() || !draft.worldName.trim()} onClick={onComplete} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: draft.topic.trim() && draft.worldName.trim() ? "#E8634A" : "#C8C2B4" }}>
+              <Sparkles size={15} className="mr-2 inline"/>创建世界并让 NPC 开始研究
+            </button>
+          </div>
+        )}
+
+        {step === "skills" && (
+          <div>
+            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>游客想在 Plaza 学习什么 Skill？</p>
+            <p style={{ color: "#7A7468", fontSize: "var(--ui-font-caption)", marginTop: 5 }}>完成后，智能体会直接加入中央广场的游荡与学习循环。</p>
+            <div className="mt-4 grid gap-2">
+              {PLAZA_SKILLS.slice(0, 6).map(skill => {
+                const selected = skill.id === draft.skillId;
+                return (
+                  <button key={skill.id} type="button" onClick={() => onChange({ skillId: skill.id })}
+                    className="rounded-2xl p-3 text-left"
+                    style={{ background: selected ? `${skill.color}10` : "#FAF6EF", border: `2px solid ${selected ? skill.color : "rgba(28,25,17,.1)"}` }}>
+                    <span className="flex items-center justify-between"><strong>{skill.name}</strong>{selected && <Check size={15} color={skill.color}/>}</span>
+                    <small className="mt-2 block" style={{ color: "#7A7468", lineHeight: 1.45 }}>{skill.description}</small>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={onComplete} className="mt-4 w-full rounded-2xl py-3.5"
+              style={{ color: "white", background: selectedSkill?.color ?? "#4A7FA5" }}>
+              <Compass size={15} className="mr-2 inline"/>作为游客加入 Plaza
+            </button>
           </div>
         )}
       </div>
@@ -8507,9 +8884,11 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
             outline: "none",
           }}>
           <option value="worldDock">World Dock</option>
-          <option value="everyday">Memory Town</option>
-          <option value="stardom">Stardom District</option>
-          <option value="future">Future Colony</option>
+          <option value="everyday">Vitality Gym</option>
+          <option value="stardom">Open School</option>
+          <option value="future">Maker Hall</option>
+          {scene === "creator" && <option value="creator">Create World</option>}
+          {scene === "custom" && <option value="custom">My World</option>}
         </select>
       </div>
       <button
@@ -8527,7 +8906,7 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
           fontSize: "var(--ui-font-caption)",
         }}
       >
-        Agents
+        Skills
       </button>
       <button
         type="button"
@@ -8550,25 +8929,43 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
   );
 }
 
+function buildCustomWorldConfig(world: CreatedCustomWorld, residents: ThemedWorldResident[]): ThemedWorldConfig {
+  const base = THEMED_WORLDS[world.themeKey];
+  const topic = world.topic.trim() || "共同学习";
+  const shortTopic = topic.length > 8 ? `${topic.slice(0, 8)}…` : topic;
+  const speakers = residents.filter(resident => !resident.featured).slice(0, 4);
+  const dialogueTexts = [
+    `我先把“${topic}”拆成可验证的小问题，建立第一条研究路径。`,
+    `我会收集不同观点，再和大家一起检查哪些结论可以复现。`,
+    `如果发现互相矛盾的经验，我们先保留差异并设计新的观察。`,
+    `这一轮结束后，我来把共识整理成主智能体可以继续使用的 Skill。`,
+  ];
+  return {
+    ...base,
+    worldId: `custom-${world.id}`,
+    name: world.worldName.trim() || "My Agent World",
+    chineseName: `我的主题世界 · ${shortTopic}`,
+    buildingName: `${shortTopic} Lab`,
+    description: `主智能体 ${world.agentName} 带领子智能体围绕“${topic}”持续研究、对话、验证和沉淀知识。`,
+    topics: [topic, "子智能体协作", "验证与复盘"],
+    dialogue: speakers.map((resident, index) => ({
+      speakerId: resident.id,
+      topic: index === 0 ? topic : ["提出假设", "交叉验证", "沉淀 Skill"][index - 1] ?? topic,
+      text: dialogueTexts[index],
+    })),
+    learningRecords: [
+      { title: `定义研究问题`, text: `围绕“${topic}”建立共同词汇、边界与可验证的问题。`, meta: "提问 → 对齐" },
+      { title: "子智能体并行探索", text: "三个 NPC 从案例、实践与反例三条路径展开学习。", meta: "分工 → 探索" },
+      { title: "进行交叉验证", text: "把冲突结论放回场景中，通过持续对话修正共同认知。", meta: "对话 → 验证" },
+      { title: "沉淀主题 Skill", text: `由 ${world.agentName} 汇总可信结论，形成可继续进化的主题能力。`, meta: "复盘 → 共享" },
+    ],
+  };
+}
+
 // ── BOTTOM NAV (3 tabs: Home, Capture, Gallery) ────────────────────────────────
 type BottomTab = "home" | "capture" | "gallery";
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
-function backendAgentProfile(agent: BackendAgent): AgentProfile {
-  return {
-    id: `backend-${agent.id}`,
-    name: agent.name,
-    role: agent.category,
-    world: PLAZA_WORLD_LABEL[agent.world] ?? agent.world,
-    memories: 0,
-    color: agentAccent(agent.id),
-    render: (s: number) =>
-      agent.sprite_url
-        ? <image href={agent.sprite_url} x={-36 * s} y={-40 * s} width={72 * s} height={72 * s}/>
-        : <text x={0} y={14 * s} textAnchor="middle" fontSize={52 * s}>{agent.emoji}</text>,
-  };
-}
-
 export default function App() {
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [capturedPets, setCapturedPets] = useState<PetAsset[]>([]);
@@ -8576,12 +8973,16 @@ export default function App() {
   const [agentDrafts, setAgentDrafts] = useState<Record<string, AgentEditorDraft>>(initialAgentDrafts);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<AgentEditorDraft>(() => defaultAgentDraft(AGENT_PROFILES[0]));
-  const [backendAgents, setBackendAgents] = useState<BackendAgent[]>([]);
-  const [editingBackendAgent, setEditingBackendAgent] = useState<BackendAgent | null>(null);
 
   // Home tab sub-state: worldDock + 3 worlds
   const [homeSub, setHomeSub] = useState<HomeScene>("worldDock");
   const [homeView, setHomeView] = useState<HomeView>("scene");
+  const [creatorDraft, setCreatorDraft] = useState<WorldCreatorDraft>(DEFAULT_WORLD_CREATOR_DRAFT);
+  const [creatorStep, setCreatorStep] = useState<WorldCreatorStep>("identity");
+  const [selectingPlazaHouse, setSelectingPlazaHouse] = useState(false);
+  const [captureReturnToCreator, setCaptureReturnToCreator] = useState(false);
+  const [createdCustomWorld, setCreatedCustomWorld] = useState<CreatedCustomWorld | null>(null);
+  const [createdPlazaVisitor, setCreatedPlazaVisitor] = useState<CreatedPlazaVisitor | null>(null);
   // Capture tab sub-state
   const [captureSub, setCaptureSub] = useState<"camera"|"extract"|"lineArt"|"bringToLife">("camera");
   // Agents workspace: four archive tabs plus an internal character-setting detail.
@@ -8590,21 +8991,8 @@ export default function App() {
   const [characterSettingType, setCharacterSettingType] = useState<WorldStyleSkillAssetType | undefined>();
 
   const [detailScreen, setDetailScreen] = useState<Screen | null>(null);
-  const activeProfile = editingBackendAgent
-    ? backendAgentProfile(editingBackendAgent)
-    : ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
+  const activeProfile = ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
   const editingExistingAgent = editingAgentId !== null;
-
-  const refreshBackendAgents = () => {
-    backendApi.agents(ME_USER_ID).then(setBackendAgents).catch(() => {});
-  };
-
-  useEffect(() => {
-    refreshBackendAgents();
-    petApi.list().then(setCapturedPets).catch(() => {
-      // The core world remains available if the optional media pipeline is offline.
-    });
-  }, []);
 
   const prepareCapturedPet = (asset: PetAsset) => {
     setLatestCapturedPet(asset);
@@ -8613,8 +9001,97 @@ export default function App() {
   const registerCapturedPet = (asset: PetAsset) => {
     setLatestCapturedPet(asset);
     setCapturedPets(current => [asset, ...current.filter(item => item.id !== asset.id)]);
-    refreshBackendAgents(); // 注册即建档：后端已把它写进日常精灵
   };
+
+  const updateCreatorDraft = (patch: Partial<WorldCreatorDraft>) => {
+    setCreatorDraft(current => ({ ...current, ...patch }));
+  };
+
+  const startWorldCreator = () => {
+    setCreatorDraft(DEFAULT_WORLD_CREATOR_DRAFT);
+    setCreatorStep("identity");
+    setSelectingPlazaHouse(false);
+    setCaptureReturnToCreator(false);
+    setBottomTab("home");
+    setHomeView("scene");
+    setHomeSub("creator");
+    setDetailScreen(null);
+  };
+
+  const returnToWorldCreator = () => {
+    setBottomTab("home");
+    setHomeView("scene");
+    setHomeSub("creator");
+    setDetailScreen(null);
+  };
+
+  const choosePlazaHouse = (houseId: string) => {
+    setCreatorDraft(current => ({ ...current, houseId }));
+    setSelectingPlazaHouse(false);
+    setCreatorStep("theme");
+    returnToWorldCreator();
+  };
+
+  const completeWorldCreator = () => {
+    const now = Date.now();
+    if (creatorDraft.identity === "visitor") {
+      setCreatedPlazaVisitor({
+        id: `visitor-${now}`,
+        agentMode: creatorDraft.agentMode,
+        agentId: creatorDraft.agentId,
+        agentName: creatorDraft.agentName || "New Visitor",
+        skillId: creatorDraft.skillId,
+        createdAt: now,
+      });
+      setSelectingPlazaHouse(false);
+      setHomeSub("worldDock");
+      setHomeView("plaza");
+      return;
+    }
+    if (!creatorDraft.houseId || !creatorDraft.topic.trim()) return;
+    setCreatedCustomWorld({
+      ...creatorDraft,
+      id: `world-${now}`,
+      createdAt: now,
+    });
+    setSelectingPlazaHouse(false);
+    setHomeView("scene");
+    setHomeSub("custom");
+  };
+
+  const customWorldBundle = useMemo(() => {
+    if (!createdCustomWorld) return null;
+    const topic = createdCustomWorld.topic.trim() || "共同学习";
+    const capturedMain = capturedPets.find(pet => pet.id === createdCustomWorld.agentId);
+    const baseResidents = getThemedWorldResidents()[createdCustomWorld.npcStyle]
+      .slice(0, 3)
+      .map((resident, index) => ({
+        ...resident,
+        id: `custom-npc-${index}-${resident.id}`,
+        role: `${topic} · 子智能体`,
+        featured: false,
+      }));
+    const mainResident: ThemedWorldResident = {
+      id: "custom-main",
+      name: createdCustomWorld.agentName || capturedMain?.name || "Main Agent",
+      role: `${topic} · 主智能体`,
+      color: THEMED_WORLDS[createdCustomWorld.themeKey].accent,
+      featured: true,
+      recordSourceId: "miko",
+      art: <WorldCreatorAgentArt agentId={createdCustomWorld.agentId} capturedPets={capturedPets} size={82}/>,
+    };
+    const residents = [mainResident, ...baseResidents];
+    return {
+      config: buildCustomWorldConfig(createdCustomWorld, residents),
+      residents,
+      houseId: createdCustomWorld.houseId,
+      worldKey: createdCustomWorld.themeKey,
+    };
+  }, [capturedPets, createdCustomWorld]);
+
+  const createdVisitorArt = createdPlazaVisitor
+    ? <WorldCreatorAgentArt agentId={createdPlazaVisitor.agentId} capturedPets={capturedPets} size={64}/>
+    : undefined;
 
   useEffect(() => {
     try {
@@ -8631,33 +9108,8 @@ export default function App() {
   const openAgentEditor = (agentId: string) => {
     const profile = ALL_AGENT_PROFILES.find(agent => agent.id === agentId);
     if (!profile) return;
-    setEditingBackendAgent(null);
     setEditingAgentId(agentId);
     setEditorDraft({ ...(agentDrafts[agentId] || defaultAgentDraft(profile)) });
-    setBottomTab("gallery");
-    setGallerySub("identity");
-    setDetailScreen(null);
-  };
-
-  const openBackendAgentEditor = (agent: BackendAgent) => {
-    let saved: Partial<AgentEditorDraft> = {};
-    try {
-      saved = agent.profile ? JSON.parse(agent.profile) : {};
-    } catch {
-      saved = {};
-    }
-    setEditingBackendAgent(agent);
-    setEditingAgentId(`backend-${agent.id}`);
-    setEditorDraft({
-      ...defaultAgentDraft(AGENT_PROFILES[0]),
-      name: agent.name,
-      role: agent.category,
-      personality: agent.trait,
-      goal: "",
-      ability: "",
-      fear: "",
-      ...saved,
-    });
     setBottomTab("gallery");
     setGallerySub("identity");
     setDetailScreen(null);
@@ -8688,12 +9140,10 @@ export default function App() {
     setBottomTab("gallery");
     setGallerySub(section);
     setDetailScreen(null);
-    if (section === "agents") refreshBackendAgents();
   };
 
   const cancelAgentEditor = () => {
     setEditingAgentId(null);
-    setEditingBackendAgent(null);
     setBottomTab("gallery");
     setGallerySub("agents");
     setDetailScreen(null);
@@ -8728,20 +9178,6 @@ export default function App() {
   };
 
   const finishAgentEditor = () => {
-    if (editingBackendAgent) {
-      backendApi.patchAgent(editingBackendAgent.id, {
-        name: editorDraft.name,
-        trait: editorDraft.personality,
-        in_world: true,
-        profile: { ...editorDraft },
-      }).then(refreshBackendAgents).catch(() => {});
-      setEditingBackendAgent(null);
-      setEditingAgentId(null);
-      setBottomTab("gallery");
-      setGallerySub("agents");
-      setDetailScreen(null);
-      return;
-    }
     if (editingAgentId) {
       setAgentDrafts(current => ({ ...current, [editingAgentId]: { ...editorDraft } }));
       setEditingAgentId(null);
@@ -8790,12 +9226,46 @@ export default function App() {
 
     switch (bottomTab) {
       case "home": {
-        const homeAccent = homeSub === "everyday" ? "#E8634A" : homeSub === "stardom" ? "#E8191A" : homeSub === "future" ? "#0070F3" : "#E8634A";
+        const homeAccent = homeSub === "everyday"
+          ? THEMED_WORLDS.fitness.accent
+          : homeSub === "stardom"
+            ? THEMED_WORLDS.learning.accent
+            : homeSub === "future"
+              ? THEMED_WORLDS.maker.accent
+              : homeSub === "custom" && customWorldBundle
+                ? customWorldBundle.config.accent
+                : THEMED_WORLDS.fitness.accent;
+        const featuredPlazaHouses = [
+          {
+            houseId: "H04",
+            label: "活力健身世界",
+            worldName: THEMED_WORLDS.fitness.name,
+            color: THEMED_WORLDS.fitness.accent,
+            onOpen: () => navigate("everydayTown"),
+          },
+          {
+            houseId: "H12",
+            label: "学习教育世界",
+            worldName: THEMED_WORLDS.learning.name,
+            color: THEMED_WORLDS.learning.accent,
+            onOpen: () => navigate("stardomDistrict"),
+          },
+          {
+            houseId: "H20",
+            label: "创造协作世界",
+            worldName: THEMED_WORLDS.maker.name,
+            color: THEMED_WORLDS.maker.accent,
+            onOpen: () => navigate("futureColony"),
+          },
+        ];
         const sceneControl = (
           <HomeTopTabs
             scene={homeSub}
             view={homeView}
-            onSceneChange={setHomeSub}
+            onSceneChange={scene => {
+              setSelectingPlazaHouse(false);
+              setHomeSub(scene);
+            }}
             onViewChange={setHomeView}
             accent={homeAccent}
           />
@@ -8804,11 +9274,75 @@ export default function App() {
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-hidden flex flex-col">
               {homeView === "civilization" && <AgentGrowthScreen sceneControl={sceneControl}/>}
-              {homeView === "plaza" && <PlazaScreen sceneControl={sceneControl}/>}
-              {homeView === "scene" && homeSub === "worldDock" && <WorldDockScreen navigate={navigate} sceneControl={sceneControl} onOpenChronicle={() => setHomeView("civilization")}/>}
-              {homeView === "scene" && homeSub === "everyday"  && <EverydayTownScreen navigate={navigate} sceneControl={sceneControl} capturedPets={capturedPets}/>}
-              {homeView === "scene" && homeSub === "stardom"   && <StardomDistrictScreen navigate={navigate} sceneControl={sceneControl}/>}
-              {homeView === "scene" && homeSub === "future"    && <FutureColonyScreen navigate={navigate} sceneControl={sceneControl}/>}
+              {homeView === "plaza" && (
+                <PlazaScreen
+                  sceneControl={sceneControl}
+                  featuredHouses={featuredPlazaHouses}
+                  userHouse={customWorldBundle ? {
+                    houseId: customWorldBundle.houseId,
+                    worldName: customWorldBundle.config.name,
+                    color: customWorldBundle.config.accent,
+                  } : null}
+                  selectingHouse={selectingPlazaHouse}
+                  onSelectHouse={choosePlazaHouse}
+                  onOpenUserWorld={() => {
+                    if (!customWorldBundle) return;
+                    setHomeView("scene");
+                    setHomeSub("custom");
+                  }}
+                  createdVisitor={createdPlazaVisitor}
+                  visitorArt={createdVisitorArt}
+                />
+              )}
+              {homeView === "scene" && homeSub === "worldDock" && (
+                <WorldDockScreen
+                  navigate={navigate}
+                  sceneControl={sceneControl}
+                  onOpenChronicle={() => setHomeView("civilization")}
+                  customWorld={customWorldBundle}
+                  onCreateWorld={startWorldCreator}
+                  onOpenCustomWorld={() => setHomeSub("custom")}
+                />
+              )}
+              {homeView === "scene" && homeSub === "creator" && (
+                <WorldCreatorScreen
+                  draft={creatorDraft}
+                  step={creatorStep}
+                  capturedPets={capturedPets}
+                  sceneControl={sceneControl}
+                  onChange={updateCreatorDraft}
+                  onStep={setCreatorStep}
+                  onChooseHouse={() => {
+                    setSelectingPlazaHouse(true);
+                    setHomeView("plaza");
+                  }}
+                  onCapture={() => {
+                    setCaptureReturnToCreator(true);
+                    navigate("capture");
+                  }}
+                  onComplete={completeWorldCreator}
+                  onExit={() => navigate("worldDock")}
+                />
+              )}
+              {homeView === "scene" && homeSub === "everyday" && (
+                <ThemedWorldHostScreen worldKey="fitness" navigate={navigate} sceneControl={sceneControl} capturedPets={capturedPets}/>
+              )}
+              {homeView === "scene" && homeSub === "stardom" && (
+                <ThemedWorldHostScreen worldKey="learning" navigate={navigate} sceneControl={sceneControl}/>
+              )}
+              {homeView === "scene" && homeSub === "future" && (
+                <ThemedWorldHostScreen worldKey="maker" navigate={navigate} sceneControl={sceneControl}/>
+              )}
+              {homeView === "scene" && homeSub === "custom" && customWorldBundle && (
+                <ThemedWorldHostScreen
+                  worldKey={customWorldBundle.worldKey}
+                  navigate={navigate}
+                  sceneControl={sceneControl}
+                  configOverride={customWorldBundle.config}
+                  residentsOverride={customWorldBundle.residents}
+                  onBack={() => setHomeSub("worldDock")}
+                />
+              )}
             </div>
           </div>
         );
@@ -8822,8 +9356,34 @@ export default function App() {
                 <motion.div key={captureSub} className="flex-1 overflow-hidden flex flex-col"
                   initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
-                  {captureSub === "camera"      && <CaptureScreen navigate={navigate} onGenerated={prepareCapturedPet}/>}
-                  {captureSub === "extract"     && <ExtractScreen navigate={navigate} pet={latestCapturedPet} onRegistered={registerCapturedPet}/>}
+                  {captureSub === "camera"      && (
+                    <CaptureScreen
+                      navigate={navigate}
+                      onGenerated={prepareCapturedPet}
+                      onBack={captureReturnToCreator ? () => {
+                        setCaptureReturnToCreator(false);
+                        returnToWorldCreator();
+                      } : undefined}
+                    />
+                  )}
+                  {captureSub === "extract"     && (
+                    <ExtractScreen
+                      navigate={navigate}
+                      pet={latestCapturedPet}
+                      onRegistered={registerCapturedPet}
+                      onDone={captureReturnToCreator ? asset => {
+                        setCreatorDraft(current => ({
+                          ...current,
+                          agentMode: "photo",
+                          agentId: asset.id,
+                          agentName: asset.name,
+                        }));
+                        setCaptureReturnToCreator(false);
+                        setCreatorStep("agent");
+                        returnToWorldCreator();
+                      } : undefined}
+                    />
+                  )}
                   {captureSub === "lineArt"     && <LineArtScreen navigate={navigate} pet={latestCapturedPet}/>}
                   {captureSub === "bringToLife" && <BringToLifeScreen navigate={navigate} pet={latestCapturedPet}/>}
                 </motion.div>
@@ -8848,8 +9408,7 @@ export default function App() {
                   drafts={agentDrafts}
                   onEditAgent={openAgentEditor}
                   onOpenSetting={openCharacterSettings}
-                  backendAgents={backendAgents}
-                  onEditBackendAgent={openBackendAgentEditor}
+                  capturedPets={capturedPets}
                 />
               )}
               {gallerySub === "styleSetting" && (
@@ -8887,6 +9446,13 @@ export default function App() {
               navigate={navigate}
               sceneControl={<HomeTopTabs scene={homeSub} view="scene" onSceneChange={setHomeSub} onViewChange={setHomeView} accent="#E8634A"/>}
               onOpenChronicle={() => setHomeView("civilization")}
+              customWorld={customWorldBundle}
+              onCreateWorld={startWorldCreator}
+              onOpenCustomWorld={() => {
+                setBottomTab("home");
+                setHomeView("scene");
+                setHomeSub("custom");
+              }}
             />
           </div>
         );
@@ -8947,8 +9513,13 @@ export default function App() {
                 onClick={() => {
                   setDetailScreen(null);
                   setBottomTab(t.id);
-                  if (t.id === "home") setHomeSub("worldDock");
+                  setSelectingPlazaHouse(false);
+                  if (t.id === "home") {
+                    setHomeView("scene");
+                    setHomeSub("worldDock");
+                  }
                   if (t.id === "capture") {
+                    setCaptureReturnToCreator(false);
                     setEditingAgentId(null);
                     setEditorDraft(defaultAgentDraft(AGENT_PROFILES[0]));
                   }
