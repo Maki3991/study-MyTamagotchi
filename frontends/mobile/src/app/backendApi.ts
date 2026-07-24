@@ -38,7 +38,7 @@ export type BackendAgent = {
   owner_name: string;
   name: string;
   category: string;
-  emoji: string;
+  image: string; // 线条风角色图 URL（capture 管线生成）
   trait: string;
   mood: number;
   location: "home" | "plaza";
@@ -68,20 +68,20 @@ export type CatalogSkill = {
   holder: {
     id: number;
     name: string;
-    emoji: string;
+    image: string;
     owner_name: string;
     location: string;
   } | null;
 };
 
-export type DialogLine = { agent_id: number; name: string; emoji: string; text: string };
+export type DialogLine = { agent_id: number; name: string; image: string; text: string };
 
 /** 图鉴模板：无主人、无记忆，复制时才在 DB 建 agent 档案。 */
 export type AgentTemplateRow = {
   id: number;
   name: string;
   category: string;
-  emoji: string;
+  image: string;
   trait: string;
   description: string;
 };

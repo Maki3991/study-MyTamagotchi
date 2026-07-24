@@ -4379,12 +4379,12 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, dbAgents, onEd
                   className="rounded-2xl overflow-hidden text-left"
                   style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
                   <div className="flex items-center justify-center relative" style={{ height: 90, background: `${color}12` }}>
-                    {agent.sprite_url ? (
-                      <motion.img src={resolveApiAssetUrl(agent.sprite_url)} alt={agent.name} animate={{ y: [0, -3, 0] }}
+                    {(agent.image || agent.sprite_url) ? (
+                      <motion.img src={resolveApiAssetUrl(agent.image || agent.sprite_url)} alt={agent.name} animate={{ y: [0, -3, 0] }}
                         transition={{ duration: 2.4, repeat: Infinity }}
                         style={{ width: 82, height: 82, objectFit: "contain" }}/>
                     ) : (
-                      <span style={{ fontSize: 44, lineHeight: 1 }}>{agent.emoji}</span>
+                      <DbAgentAvatar agent={agent} size={56}/>
                     )}
                     <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
                       style={{ background: `${color}20`, color, border: `1px solid ${color}40`, fontSize: "var(--ui-font-caption)" }}>
@@ -4427,7 +4427,15 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, dbAgents, onEd
                 className="rounded-2xl overflow-hidden text-left"
                 style={{ background: "#FAF6EF", border: "1.5px dashed rgba(28,25,17,0.18)" }}>
                 <div className="flex items-center justify-center relative" style={{ height: 82, background: "rgba(28,25,17,0.04)" }}>
-                  <span style={{ fontSize: 40, lineHeight: 1 }}>{template.emoji}</span>
+                  {template.image ? (
+                    <img src={resolveApiAssetUrl(template.image)} alt={template.name}
+                      style={{ width: 64, height: 64, objectFit: "contain" }}/>
+                  ) : (
+                    <span className="inline-flex items-center justify-center rounded-full"
+                      style={{ width: 52, height: 52, background: "rgba(28,25,17,0.08)", color: "#7A7468", fontSize: 22, lineHeight: 1 }}>
+                      {template.name.slice(0, 1)}
+                    </span>
+                  )}
                   <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
                     style={{ background: "#7A746820", color: "#7A7468", border: "1px solid #7A746840", fontSize: "var(--ui-font-caption)" }}>
                     模板
@@ -5133,16 +5141,38 @@ function dbAgentColor(agent: { id: number }): string {
 }
 
 function DbAgentAvatar({ agent, size = 56 }: { agent: BackendAgent; size?: number }) {
-  if (agent.sprite_url) {
+  const src = agent.image || agent.sprite_url;
+  if (src) {
     return (
       <img
-        src={resolveApiAssetUrl(agent.sprite_url)}
+        src={resolveApiAssetUrl(src)}
         alt={agent.name}
         style={{ width: size, height: size, objectFit: "contain" }}
       />
     );
   }
-  return <span style={{ fontSize: size * 0.62, lineHeight: 1 }}>{agent.emoji}</span>;
+  // 线条风形象还在生成中：先用名字首字占位
+  const color = dbAgentColor(agent);
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-full"
+      style={{ width: size, height: size, background: `${color}18`, border: `1.5px solid ${color}40`, color, fontSize: size * 0.4, lineHeight: 1 }}
+    >
+      {agent.name.slice(0, 1)}
+    </span>
+  );
+}
+
+/** 对话行里的小头像：有线条风形象时显示图，否则不占位。 */
+function AgentFace({ image, name, size = 16 }: { image?: string; name: string; size?: number }) {
+  if (!image) return null;
+  return (
+    <img
+      src={resolveApiAssetUrl(image)}
+      alt={name}
+      style={{ width: size, height: size, objectFit: "contain", display: "inline-block", verticalAlign: "-3px", marginRight: 3 }}
+    />
+  );
 }
 
 /** Home 顶部 "Agents" 视图：展示后端 DB 中所有 agents 的详细资料。 */
@@ -5519,13 +5549,15 @@ function PlazaScreen({
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>
-              {learnResult.teacher.emoji} {learnResult.teacher.name}
+              <AgentFace image={learnResult.teacher.image || learnResult.teacher.sprite_url} name={learnResult.teacher.name}/>
+              {learnResult.teacher.name}
             </span>
             <ArrowRight size={10} color="#8E867A"/>
             <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>{learnResult.skill}</span>
             <ArrowRight size={10} color="#8E867A"/>
             <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>
-              {learnResult.learner.emoji} {learnResult.learner.name}
+              <AgentFace image={learnResult.learner.image || learnResult.learner.sprite_url} name={learnResult.learner.name}/>
+              {learnResult.learner.name}
             </span>
           </div>
         </div>
@@ -5547,7 +5579,7 @@ function PlazaScreen({
                 conversePair={conversing ? conversePair : null}
                 converseLine={conversing && activeConverseLine ? {
                   memberId: String(activeConverseLine.agent_id),
-                  name: `${activeConverseLine.emoji} ${activeConverseLine.name}`,
+                  name: activeConverseLine.name,
                   text: activeConverseLine.text,
                 } : null}
               />
@@ -6005,7 +6037,7 @@ function PlazaScreen({
                       <p className="truncate" style={{ color, fontSize: "var(--ui-font-micro)", marginTop: 3 }}>{skill.summary}</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>
-                          {skill.holder ? `${skill.holder.emoji} ${skill.holder.name} 可教授` : "无持有者"}
+                          {skill.holder ? <><AgentFace image={skill.holder.image} name={skill.holder.name} size={14}/>{skill.holder.name} 可教授</> : "无持有者"}
                         </span>
                         <span className="rounded-full px-1.5 py-0.5 shrink-0" style={{ color, background: `${color}12`, fontSize: "var(--ui-font-micro)" }}>{skill.category}</span>
                       </div>
@@ -6033,9 +6065,12 @@ function PlazaScreen({
               <p className="truncate" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginTop: 4 }}>{selectedDbSkill.summary}</p>
             </div>
             {selectedDbSkill.holder && (
-              <span title={`${selectedDbSkill.holder.name} 可以教授`} className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                style={{ background: `${dbAgentColor(selectedDbSkill)}18`, border: "1px solid #FAF6EF", fontSize: 14 }}>
-                {selectedDbSkill.holder.emoji}
+              <span title={`${selectedDbSkill.holder.name} 可以教授`} className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 overflow-hidden"
+                style={{ background: `${dbAgentColor(selectedDbSkill)}18`, border: "1px solid #FAF6EF", fontSize: 11, color: dbAgentColor(selectedDbSkill) }}>
+                {selectedDbSkill.holder.image
+                  ? <img src={resolveApiAssetUrl(selectedDbSkill.holder.image)} alt={selectedDbSkill.holder.name}
+                      style={{ width: 24, height: 24, objectFit: "contain" }}/>
+                  : selectedDbSkill.holder.name.slice(0, 1)}
               </span>
             )}
           </div>
@@ -6064,7 +6099,9 @@ function PlazaScreen({
                         fontSize: "var(--ui-font-micro)",
                         lineHeight: 1.55,
                       }}>
-                      <span style={{ color: isLearner ? "#E8634A" : "#579447" }}>{line.emoji} {line.name}：</span>
+                      <span style={{ color: isLearner ? "#E8634A" : "#579447" }}>
+                        <AgentFace image={line.image} name={line.name} size={14}/>{line.name}：
+                      </span>
                       {line.text}
                     </span>
                   </div>
@@ -6253,9 +6290,9 @@ export default function App() {
     world: agent.world,
     memories: 0,
     color: dbAgentColor(agent),
-    render: (s, animated) => agent.sprite_url
-      ? <PetSpriteAgent src={resolveApiAssetUrl(agent.sprite_url)} size={80 * s} animated={animated}/>
-      : <text x={0} y={10 * s} textAnchor="middle" fontSize={30 * s}>{agent.emoji}</text>,
+    render: (s, animated) => (agent.image || agent.sprite_url)
+      ? <PetSpriteAgent src={resolveApiAssetUrl(agent.image || agent.sprite_url)} size={80 * s} animated={animated}/>
+      : <text x={0} y={10 * s} textAnchor="middle" fontSize={26 * s}>{agent.name.slice(0, 1)}</text>,
   });
   const activeProfile = (editingDbAgent && editingAgentId === `db-${editingDbAgent.id}`)
     ? dbAgentProfile(editingDbAgent)
