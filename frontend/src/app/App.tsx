@@ -6703,7 +6703,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
         </div>
       </div>
 
-      <div className="px-4 pb-3 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      <div className="shrink-0 px-4 pb-3 flex gap-2 overflow-x-auto" style={{ height: 60, scrollbarWidth: "none" }}>
         {growthAgents.map(agent => {
           const active = selected.id === agent.id;
           return (
@@ -6717,6 +6717,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
               className="shrink-0 rounded-xl px-2 py-2 flex items-center gap-2 text-left"
               style={{
                 width: 112,
+                height: 48,
                 background: active ? `${agent.color}12` : "#FAF6EF",
                 border: `1.5px solid ${active ? agent.color : "rgba(28,25,17,.1)"}`,
                 color: active ? agent.color : "#8E867A",
