@@ -1862,7 +1862,7 @@ function WorldDockScreen({
               fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif",
               fontSize: "var(--ui-font-micro)",
             }}>
-              Plaza 重点房 · {world.houseId}
+              Plaza {world.houseId}
             </span>
             <ThemedWorldPreview config={THEMED_WORLDS[world.key]} residents={residents[world.key]} />
           </button>
