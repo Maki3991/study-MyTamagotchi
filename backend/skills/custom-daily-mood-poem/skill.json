@@ -1,0 +1,42 @@
+{
+  "def_id": "custom-daily-mood-poem",
+  "name": "心情诗记",
+  "emoji": "🌿",
+  "category": "健康",
+  "description": "记录每日心情并生成一句治愈短诗，温柔抚慰心灵",
+  "kind": "prompt",
+  "source_repo": "forged-in-app",
+  "inputs": [
+    {
+      "key": "mood",
+      "label": "今日心情",
+      "type": "select",
+      "required": true,
+      "options": [
+        "开心",
+        "平静",
+        "疲惫",
+        "忧伤",
+        "焦虑",
+        "感恩"
+      ],
+      "placeholder": "选择你今天的感受"
+    },
+    {
+      "key": "note",
+      "label": "心情备注",
+      "type": "text",
+      "required": false,
+      "placeholder": "可选：简单描述原因或场景（如：晒太阳、争吵、加班）"
+    }
+  ],
+  "output": {
+    "type": "markdown"
+  },
+  "cta": "生成短诗",
+  "capabilities": [
+    "根据情感选择生成富有画面感的治愈短诗",
+    "支持可选备注输入，使诗歌更贴近个人真实体验",
+    "输出格式清晰，便于每日复习与情感追踪"
+  ]
+}
