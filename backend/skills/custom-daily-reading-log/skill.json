@@ -1,0 +1,41 @@
+{
+  "def_id": "custom-daily-reading-log",
+  "name": "读书摘抄",
+  "emoji": "📚",
+  "category": "学习",
+  "description": "每日记录阅读书籍与摘抄，自动生成月度阅读报告",
+  "kind": "prompt",
+  "source_repo": "forged-in-app",
+  "inputs": [
+    {
+      "key": "book_title",
+      "label": "书名",
+      "type": "text",
+      "required": true,
+      "placeholder": "例如：《三体》"
+    },
+    {
+      "key": "reading_notes",
+      "label": "摘抄内容",
+      "type": "text",
+      "required": true,
+      "placeholder": "记录你今天读到的亮点句子或感悟"
+    },
+    {
+      "key": "date",
+      "label": "阅读日期",
+      "type": "date",
+      "required": true,
+      "placeholder": "选择今天的日期"
+    }
+  ],
+  "output": {
+    "type": "markdown"
+  },
+  "cta": "记录今日",
+  "capabilities": [
+    "自动归档每日读书摘抄",
+    "按月生成结构化阅读报告",
+    "支持摘抄分类与日期追溯"
+  ]
+}

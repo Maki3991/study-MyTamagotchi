@@ -1,0 +1,13 @@
+{
+  "def_id": "skill-forge",
+  "name": "技能锻造",
+  "emoji": "🛠️",
+  "description": "创造 skill 的 skill：用一句话描述想要的能力，自动设计输入表单、工作流并发布为全 app 可用、可学习的新技能",
+  "kind": "module",
+  "source_repo": "",
+  "inputs": [
+    { "key": "prompt", "label": "想创造什么技能？", "type": "text", "required": true, "placeholder": "例：帮我记录每天的健身进度并给建议" }
+  ],
+  "output": { "type": "markdown" },
+  "cta": "开始锻造"
+}

@@ -97,7 +97,101 @@ async def _run_heytea(sdef: dict, inputs: dict, artifacts: dict, save_artifact=N
     return "\n".join(parts)
 
 
-IMPL = {"heytea-poster": _run_heytea}
+ALLOWED_INPUT_TYPES = {"text", "select", "date", "time", "image"}
+
+
+async def forge_skill(prompt: str) -> tuple[str, dict | None]:
+    """技能锻造核心：LLM 设计 → 写入 backend/skills/custom-*/ → 立即可用。
+    返回 (markdown 报告, 新技能定义 dict 或 None)。"""
+    design = await llm.chat_json([
+        {"role": "system", "content": (
+            "你是技能架构师，把用户想要的能力设计成一个可执行的 LLM 技能。只输出 JSON。\n"
+            "输入控件类型只能用：text / select / date / time / image。inputs 数量 1-4 个，key 用英文蛇形命名。"
+        )},
+        {"role": "user", "content": (
+            f"用户需求：「{prompt}」\n输出 JSON：{{\n"
+            '"slug": "英文短横线小写标识",\n'
+            '"name": "4-6字中文技能名",\n'
+            '"emoji": "一个最贴切的emoji",\n'
+            '"category": "分类（如 健康/学习/生活/创作）",\n'
+            '"description": "30字内技能简介",\n'
+            '"inputs": [{"key": "英文key", "label": "中文标签", "type": "text|select|date|time|image", '
+            '"required": true, "options": ["仅select需要"], "placeholder": "提示"}],\n'
+            '"cta": "4字动作按钮文案",\n'
+            '"workflow": "给执行 LLM 的中文系统提示词：角色设定 + 工作步骤 + 输出的 markdown 格式要求（含2-3个##小节），200字左右",\n'
+            '"capabilities": ["三条", "能力", "要点"]\n'
+            "}}"
+        )},
+    ], max_tokens=1200)
+    if not isinstance(design, dict) or not design.get("name"):
+        return "⚠️ 锻造失败：设计蓝图没有生成，请换个说法再试一次。", None
+
+    slug = "".join(c for c in str(design.get("slug", "skill")).lower() if c.isalnum() or c == "-") or "skill"
+    def_id = f"custom-{slug}"
+    n = 2
+    while (SKILLS_DIR / def_id).exists():
+        def_id = f"custom-{slug}-{n}"
+        n += 1
+
+    inputs = []
+    for spec in (design.get("inputs") or [])[:4]:
+        if not isinstance(spec, dict) or not spec.get("key"):
+            continue
+        itype = spec.get("type") if spec.get("type") in ALLOWED_INPUT_TYPES else "text"
+        item = {"key": str(spec["key"]), "label": str(spec.get("label", spec["key"])),
+                "type": itype, "required": bool(spec.get("required"))}
+        if itype == "select" and spec.get("options"):
+            item["options"] = [str(o) for o in spec["options"]][:6]
+        if spec.get("placeholder"):
+            item["placeholder"] = str(spec["placeholder"])
+        inputs.append(item)
+    if not inputs:
+        inputs = [{"key": "request", "label": "你的需求", "type": "text", "required": True}]
+
+    sdef = {
+        "def_id": def_id,
+        "name": str(design["name"])[:12],
+        "emoji": str(design.get("emoji", "✨"))[:4],
+        "category": str(design.get("category", "生活")),
+        "description": str(design.get("description", ""))[:60],
+        "kind": "prompt",
+        "source_repo": "forged-in-app",
+        "inputs": inputs,
+        "output": {"type": "markdown"},
+        "cta": str(design.get("cta", "使用技能"))[:8],
+        "capabilities": [str(c) for c in (design.get("capabilities") or [])][:3],
+    }
+    d = SKILLS_DIR / def_id
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "skill.json").write_text(json.dumps(sdef, ensure_ascii=False, indent=2), encoding="utf-8")
+    prompt_md = (
+        f"{design.get('workflow', '你是一个贴心的助手，认真完成用户的请求。')}\n\n## 用户输入\n"
+        + "\n".join(f"- {i['label']}：{{{i['key']}}}" for i in inputs)
+        + "\n\n始终用简体中文输出 markdown，语气温暖、内容具体可执行。"
+    )
+    (d / "prompt.md").write_text(prompt_md, encoding="utf-8")
+
+    md = "\n".join([
+        f"## {sdef['emoji']} 锻造完成：{sdef['name']}",
+        sdef["description"],
+        "",
+        "**能力要点**",
+        *[f"- {c}" for c in sdef["capabilities"]],
+        "",
+        "**输入表单**",
+        *[f"- {i['label']}（{i['type']}）" for i in inputs],
+        "",
+        f"技能已发布为 `{def_id}`，现在就可以使用，也能在广场被其他 agent 学走。",
+    ])
+    return md, sdef
+
+
+async def _run_skill_forge(sdef: dict, inputs: dict, artifacts: dict, save_artifact=None) -> str:
+    md, _ = await forge_skill(str(inputs.get("prompt", "")))
+    return md
+
+
+IMPL = {"heytea-poster": _run_heytea, "skill-forge": _run_skill_forge}
 
 
 async def invoke(def_id: str, inputs: dict, artifacts: dict, save_artifact=None) -> str:
