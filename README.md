@@ -9,9 +9,8 @@
 ```
 MyTamagotchi/
 ├── backend/                 ★ 唯一共享后端（FastAPI + SQLModel + SQLite）
-│   ├── app/                    业务接口、技能运行时、LLM 编排
-│   ├── skills/                 可执行技能定义（heytea-poster / vedic-astro / skill-forge / custom-*）
-│   └── world_engine/           ForkWorld 世界生成/互访逻辑（已接线：/api/worlds /profile /bump /visit /ws）
+│   ├── app/                    业务接口 · 技能运行时 · 世界演化引擎(world.py) · 宠物流水线(pets.py) · LLM 编排
+│   └── skills/                 可执行技能定义（heytea-poster / vedic-astro / skill-forge / custom-*）
 ├── contracts/               ★ 三端与后端的共享接口契约（JSON Schema）
 │   ├── world.schema.json
 │   ├── visit_result.schema.json
@@ -53,7 +52,7 @@ cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn app.main:app --port 8000
 ```
-`backend/world_engine/` 是 ForkWorld 的世界生成/互访 LLM 编排，尚需按 `contracts/` 挂成 REST/WS 路由供大屏/硬件端消费，见 [backend/world_engine/README.md](backend/world_engine/README.md)。
+后端的世界演化引擎在 `backend/app/world.py`（`/api/world`、`/api/world/tick`，启动后每 45s 自动 tick）。`contracts/` 保留为大屏/硬件端「世界互访」的接口契约（设计参考）。
 
 ## 说明
 
