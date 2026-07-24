@@ -1825,6 +1825,12 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
     }
   };
 
+  const retryUpload = () => {
+    const file = uploadInput.current?.files?.[0] || cameraInput.current?.files?.[0];
+    if (file) handleFile(file);
+    else uploadInput.current?.click();
+  };
+
   return (
     <div className="flex flex-col h-full" style={{ background: "#17150F", color: "#FAF6EF" }}>
       <input ref={cameraInput} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden
@@ -1932,13 +1938,13 @@ function CaptureScreen({ navigate, onGenerated }: { navigate: (s: Screen) => voi
         {error ? (
           <span style={{ color: "#F3A17F" }}>
             {error}
-            {job?.id && job.id !== "uploading" && (
-              <button type="button" onClick={retryJob} style={{
+            {job?.id && (
+              <button type="button" onClick={job.id === "uploading" ? retryUpload : retryJob} style={{
                 display: "block", margin: "8px auto 0", padding: "6px 10px",
                 borderRadius: 10, border: "1px solid rgba(255,255,255,.2)",
                 background: "rgba(255,255,255,.08)", color: "#FAF6EF", fontSize: "var(--ui-font-caption)",
               }}>
-                使用已保存原图重新生成
+                {job.id === "uploading" ? "重新连接并生成" : "使用已保存原图重新生成"}
               </button>
             )}
           </span>

@@ -47,14 +47,22 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
+async function fetchApi(input: string, init?: RequestInit) {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error("生成服务未连接，请点击重试");
+  }
+}
+
 export const petApi = {
   async list(): Promise<PetAsset[]> {
-    const payload = await readJson<{ assets: PetAsset[] }>(await fetch(`${API_BASE}/pets`));
+    const payload = await readJson<{ assets: PetAsset[] }>(await fetchApi(`${API_BASE}/pets`));
     return payload.assets.map(absoluteAssetUrls);
   },
 
   async submit(file: File, name?: string): Promise<PetJob> {
-    const response = await fetch(`${API_BASE}/pets`, {
+    const response = await fetchApi(`${API_BASE}/pets`, {
       method: "POST",
       headers: {
         "Content-Type": file.type,
@@ -67,19 +75,19 @@ export const petApi = {
   },
 
   async getJob(id: string): Promise<PetJob> {
-    const job = await readJson<PetJob>(await fetch(`${API_BASE}/pets/${id}`));
+    const job = await readJson<PetJob>(await fetchApi(`${API_BASE}/pets/${id}`));
     return job.asset ? { ...job, asset: absoluteAssetUrls(job.asset) } : job;
   },
 
   async register(id: string): Promise<PetAsset> {
-    const payload = await readJson<{ asset: PetAsset }>(await fetch(`${API_BASE}/pets/${id}/register`, {
+    const payload = await readJson<{ asset: PetAsset }>(await fetchApi(`${API_BASE}/pets/${id}/register`, {
       method: "POST",
     }));
     return absoluteAssetUrls(payload.asset);
   },
 
   async retry(id: string): Promise<PetJob> {
-    return readJson<PetJob>(await fetch(`${API_BASE}/pets/${id}/retry`, {
+    return readJson<PetJob>(await fetchApi(`${API_BASE}/pets/${id}/retry`, {
       method: "POST",
     }));
   },

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite",
+    "dev": "node server/dev-all.mjs",
+    "frontend": "vite",
     "backend": "node server/index.mjs",
     "dev:all": "node server/dev-all.mjs",
     "test:backend": "node --test server/*.test.mjs"

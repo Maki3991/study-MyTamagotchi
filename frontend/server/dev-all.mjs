@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const frontendArgs = process.argv.slice(2);
 const children = [
   spawn(process.execPath, ["server/index.mjs"], { stdio: "inherit", env: process.env }),
-  spawn(npmCommand, ["run", "dev"], { stdio: "inherit", env: process.env }),
+  spawn(npmCommand, ["run", "frontend", "--", ...frontendArgs], { stdio: "inherit", env: process.env }),
 ];
 
 let closing = false;

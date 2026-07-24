@@ -35,10 +35,11 @@ a demo sprite as if it were generated from the user's photo.
 ## Run
 
 ```bash
-npm run backend
+npm run dev
 ```
 
-Use `npm run dev:all` to start both the service and Vite. The default narrative
+The default command starts both the service and Vite. Use `npm run frontend`
+or `npm run backend` when only one process is needed. The default narrative
 generator is deterministic and local. To opt into an OpenAI-compatible model,
 copy `.env.example` to `.env`, set `WORLD_LLM_ENABLED=true`, and provide a key,
 base URL, and model. Existing DashScope, DeepSeek, and GMI variable names are
