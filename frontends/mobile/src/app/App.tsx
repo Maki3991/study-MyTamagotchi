@@ -20,6 +20,15 @@ import { useWorldEvolution } from "./useWorldEvolution";
 import type { WorldAgent } from "./worldApi";
 import { petApi, waitForPet, type PetAsset, type PetJob } from "./petApi";
 import {
+  backendApi,
+  resolveApiAssetUrl,
+  ME_USER_ID,
+  type BackendAgent,
+  type BackendAgentDetail,
+  type CatalogSkill,
+  type DialogLine,
+} from "./backendApi";
+import {
   WORLD_STYLE_SKILLS,
   WORLD_STYLE_SKILL_ASSETS,
   type WorldStyleSkillAssetType,
@@ -1808,35 +1817,6 @@ function WorldDockScreen({
             <ChevronRight size={15} color="#6B9E7A"/>
           </div>
         </button>
-      </div>
-
-      {/* Residents */}
-      <div className="pb-3">
-        <div className="px-5 mb-2 flex items-end justify-between">
-          <div>
-            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911" }}>World Residents</p>
-            <p style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", marginTop: "3px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>小小物件，也有鲜明人格</p>
-          </div>
-          <button onClick={() => navigate("agentGallery")}
-            style={{ color: "#E8634A", fontSize: "var(--ui-font-body)", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>查看全部 →</button>
-        </div>
-        <div className="flex gap-2 px-5 overflow-x-auto">
-          {AGENT_PROFILES.map(a => (
-            <button key={a.id} onClick={() => navigate("agentGallery")}
-              className="flex-shrink-0 rounded-xl overflow-hidden text-left"
-              aria-label={`Open ${a.name} in Agent Archive`}
-              style={{ width: "76px", background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)" }}>
-              <div className="relative flex items-center justify-center" style={{ height: "58px", background: a.color + "14" }}>
-                <svg width="58" height="58" viewBox="-29 -29 58 58">{a.render(0.62, false)}</svg>
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: a.color }}/>
-              </div>
-              <div className="px-2 py-1.5">
-                <p className="truncate" style={{ fontSize: "var(--ui-font-body)", color: "#1C1911", fontWeight: 700 }}>{a.name}</p>
-                <p className="truncate" style={{ fontSize: "var(--ui-font-caption)", color: a.color, marginTop: "2px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{localizedAgentRole(a)}</p>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* World cards */}
@@ -6105,13 +6085,12 @@ function AgentArchiveTabs({ active, onChange }: {
   const tabs: { id: AgentArchiveSection; label: string }[] = [
     { id: "agents", label: "Agents" },
     { id: "objects", label: "Objects" },
-    { id: "identity", label: "Identity" },
     { id: "chain", label: "Chain" },
     { id: "device", label: "Device" },
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-1.5 px-5 pb-2">
+    <div className="grid grid-cols-4 gap-1.5 px-5 pb-2">
       {tabs.map(tab => {
         const selected = active === tab.id;
         return (
@@ -6330,7 +6309,7 @@ function AgentChainScreen({ archiveTabs }: { archiveTabs?: React.ReactNode }) {
   );
 }
 
-function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, capturedPets }: {
+function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, capturedPets, dbAgents, onEditDbAgent }: {
   navigate: (s: Screen) => void;
   section: "agents" | "objects";
   onSectionChange: (section: AgentArchiveSection) => void;
@@ -6338,6 +6317,8 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
   onEditAgent: (agentId: string) => void;
   onOpenSetting: (category: CharacterStyleCategory, type?: WorldStyleSkillAssetType) => void;
   capturedPets: PetAsset[];
+  dbAgents: BackendAgent[];
+  onEditDbAgent: (agent: BackendAgent) => void;
 }) {
   const [agentStyle, setAgentStyle] = useState<CharacterStyleCategory>("dailySpirits");
   const activeStyle = AGENT_STYLE_OPTIONS.find(style => style.id === agentStyle) || AGENT_STYLE_OPTIONS[0];
@@ -6394,7 +6375,44 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
           </div>
           <div className="grid grid-cols-2 gap-3 pb-4">
           {agentStyle === "dailySpirits" ? <>
-            {capturedPets.filter(pet => pet.name !== "暹罗猫").map(pet => (
+            {dbAgents.map(agent => {
+              const color = dbAgentColor(agent);
+              return (
+                <button key={`db-${agent.id}`} onClick={() => onEditDbAgent(agent)}
+                  aria-label={`编辑 ${agent.name} 的 identity`}
+                  className="rounded-2xl overflow-hidden text-left"
+                  style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
+                  <div className="flex items-center justify-center relative" style={{ height: 90, background: `${color}12` }}>
+                    {agent.sprite_url ? (
+                      <motion.img src={resolveApiAssetUrl(agent.sprite_url)} alt={agent.name} animate={{ y: [0, -3, 0] }}
+                        transition={{ duration: 2.4, repeat: Infinity }}
+                        style={{ width: 82, height: 82, objectFit: "contain" }}/>
+                    ) : (
+                      <span style={{ fontSize: 44, lineHeight: 1 }}>{agent.emoji}</span>
+                    )}
+                    <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
+                      style={{ background: `${color}20`, color, border: `1px solid ${color}40`, fontSize: "var(--ui-font-caption)" }}>
+                      {agent.in_world ? "已入世界" : "待编辑"}
+                    </div>
+                  </div>
+                  <div className="p-2.5">
+                    <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{agent.name}</p>
+                    <p style={{ fontSize: "var(--ui-font-body)", color, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{agent.category}</p>
+                    <p className="truncate mt-1" style={{ fontSize: "var(--ui-font-caption)", color: "#8E867A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+                      {agent.trait}
+                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{agent.world}</span>
+                      <span style={{ fontSize: "var(--ui-font-caption)", color, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>编辑 →</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {capturedPets
+              .filter(pet => pet.name !== "暹罗猫")
+              .filter(pet => !pet.agentId || !dbAgents.some(agent => agent.id === pet.agentId))
+              .map(pet => (
               <button key={pet.id} onClick={() => navigate("everydayTown")}
                 aria-label={`查看 ${pet.name}`}
                 className="rounded-2xl overflow-hidden text-left"
@@ -7920,6 +7938,141 @@ const SKILL_FORGE_LAYER_META = {
   governance: { color: "#8A7A9A", label: "GOVERNANCE" },
 } as const;
 
+// ---------- 后端 DB agent 展示辅助 ----------
+
+const DB_AGENT_COLORS = ["#E8634A", "#4A7FA5", "#579447", "#D18A3D", "#8A543B", "#6D6884", "#C890C0", "#6B9E7A"];
+
+function dbAgentColor(agent: { id: number }): string {
+  return DB_AGENT_COLORS[agent.id % DB_AGENT_COLORS.length];
+}
+
+function DbAgentAvatar({ agent, size = 56 }: { agent: BackendAgent; size?: number }) {
+  if (agent.sprite_url) {
+    return (
+      <img
+        src={resolveApiAssetUrl(agent.sprite_url)}
+        alt={agent.name}
+        style={{ width: size, height: size, objectFit: "contain" }}
+      />
+    );
+  }
+  return <span style={{ fontSize: size * 0.62, lineHeight: 1 }}>{agent.emoji}</span>;
+}
+
+/** Home 顶部 "Agents" 视图：展示后端 DB 中所有 agents 的详细资料。 */
+function AgentsDirectoryScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
+  const [agents, setAgents] = useState<BackendAgent[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<BackendAgentDetail | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    backendApi.agents()
+      .then(rows => { if (active) { setAgents(rows); setError(null); } })
+      .catch(caught => { if (active) setError(caught instanceof Error ? caught.message : "后端未连接"); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (expandedId == null) { setDetail(null); return; }
+    let active = true;
+    backendApi.agent(expandedId)
+      .then(row => { if (active) setDetail(row); })
+      .catch(() => { if (active) setDetail(null); });
+    return () => { active = false; };
+  }, [expandedId]);
+
+  return (
+    <div className="flex flex-col h-full" style={{ background: "#F5F0E8", color: "#1C1911", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+      <div className="px-4 pt-9 pb-1 flex justify-end">{sceneControl}</div>
+      <div className="px-4 pt-1 pb-2">
+        <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700 }}>Agents</p>
+        <p style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", marginTop: 3 }}>
+          世界里全部智能体的详细档案 · 共 {agents.length} 位
+        </p>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 flex flex-col gap-2">
+        {error && (
+          <div className="rounded-xl px-3 py-2.5" style={{ background: "#E8634A12", border: "1px solid #E8634A40", color: "#B5482F", fontSize: "var(--ui-font-caption)" }}>
+            无法连接后端：{error}
+          </div>
+        )}
+        {agents.map(agent => {
+          const color = dbAgentColor(agent);
+          const expanded = expandedId === agent.id;
+          return (
+            <button
+              key={agent.id}
+              type="button"
+              onClick={() => setExpandedId(expanded ? null : agent.id)}
+              className="rounded-2xl p-3 text-left"
+              style={{
+                background: expanded ? `${color}0E` : "#FAF6EF",
+                border: `1.5px solid ${expanded ? color : "rgba(28,25,17,.1)"}`,
+                boxShadow: "0 2px 8px rgba(28,25,17,.04)",
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${color}14`, border: `1px solid ${color}30` }}>
+                  <DbAgentAvatar agent={agent} size={40}/>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>{agent.name}</p>
+                    {agent.owner_id === ME_USER_ID && (
+                      <span className="rounded-full px-1.5 py-0.5" style={{ color, background: `${color}14`, fontSize: "var(--ui-font-micro)" }}>我的</span>
+                    )}
+                  </div>
+                  <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>
+                    @{agent.owner_name} · {agent.category} · {agent.location === "plaza" ? "广场" : "在家"} · {agent.world}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p style={{ color, fontSize: "var(--ui-font-caption)" }}>{agent.mood}</p>
+                  <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>MOOD</p>
+                </div>
+              </div>
+              <p style={{ color: "#6F685D", fontSize: "var(--ui-font-caption)", lineHeight: 1.6, marginTop: 8 }}>{agent.trait}</p>
+              {expanded && (
+                <div className="mt-2 pt-2" style={{ borderTop: "1px dashed rgba(28,25,17,.14)" }}>
+                  <p style={{ color, fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>SKILLS</p>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {detail?.skills.length
+                      ? detail.skills.map(skill => (
+                        <span key={skill.id} className="rounded-full px-2 py-1"
+                          style={{ color, background: `${color}12`, border: `1px solid ${color}30`, fontSize: "var(--ui-font-micro)" }}>
+                          {skill.name}
+                        </span>
+                      ))
+                      : <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{detail ? "暂无技能" : "加载中…"}</span>}
+                  </div>
+                  {detail && detail.memories.length > 0 && (
+                    <div className="mt-2">
+                      <p style={{ color, fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>最近记忆</p>
+                      <div className="flex flex-col gap-1 mt-1.5">
+                        {detail.memories.slice(0, 4).map(memory => (
+                          <p key={memory.id} style={{ color: "#6F685D", fontSize: "var(--ui-font-micro)", lineHeight: 1.55 }}>
+                            · {memory.content}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </button>
+          );
+        })}
+        {!error && agents.length === 0 && (
+          <p style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)", textAlign: "center", marginTop: 20 }}>正在加载智能体档案…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PlazaScreen({
   sceneControl,
   featuredHouses,
@@ -7940,12 +8093,26 @@ function PlazaScreen({
   visitorArt?: React.ReactNode;
 }) {
   const [plazaTab, setPlazaTab] = useState<"square" | "agents" | "skills">("square");
-  const [selectedAgentId, setSelectedAgentId] = useState("atlas");
   const [focusedPlazaAgentId, setFocusedPlazaAgentId] = useState<string | null>(null);
   const [plazaFocusRequest, setPlazaFocusRequest] = useState(0);
-  const [selectedSkillId, setSelectedSkillId] = useState("route-mapping");
-  const [selectedLearnerId, setSelectedLearnerId] = useState("miko");
+  // 后端 DB 数据：广场 agents / 在场技能目录 / 学习对话
+  const [dbPlazaAgents, setDbPlazaAgents] = useState<BackendAgent[]>([]);
+  const [dbSkills, setDbSkills] = useState<CatalogSkill[]>([]);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [selectedDbAgentId, setSelectedDbAgentId] = useState<number | null>(null);
+  const [selectedDbSkillId, setSelectedDbSkillId] = useState<number | null>(null);
+  const [learning, setLearning] = useState(false);
+  const [learnError, setLearnError] = useState<string | null>(null);
+  const [learnResult, setLearnResult] = useState<{
+    lines: DialogLine[];
+    skill: string;
+    learner: BackendAgent;
+    teacher: BackendAgent;
+    alreadyKnown: boolean;
+  } | null>(null);
   const [forgePrompt, setForgePrompt] = useState("");
+  const [forgeError, setForgeError] = useState<string | null>(null);
+  const [forgeBackendSkill, setForgeBackendSkill] = useState<CatalogSkill | null>(null);
   const [forgeStatus, setForgeStatus] = useState<"idle" | "researching" | "review" | "published">("idle");
   const [forgeTrace, setForgeTrace] = useState<SkillForgeTraceEvent[]>([]);
   const [forgeDraft, setForgeDraft] = useState<PlazaSkill | null>(null);
@@ -7958,11 +8125,7 @@ function PlazaScreen({
     evaluationPassed: number;
     evaluationTotal: number;
   } | null>(null);
-  const [customSkills, setCustomSkills] = useState<PlazaSkill[]>([]);
   const forgeRunRef = useRef(0);
-  const [skillLoadouts, setSkillLoadouts] = useState<Record<string, string[]>>(() => ({
-    ...MY_AGENT_SKILL_LOADOUTS,
-  }));
   const baseMembers = [
     {
       id: "miko",
@@ -8046,36 +8209,54 @@ function PlazaScreen({
       art: visitorArt ?? <PlazaStyleAgent type="blockCourier" size={58}/>,
     },
   ] : baseMembers;
-  const allSkills = [...customSkills, ...PLAZA_SKILLS];
-  const publicAgents = members.filter(member => !member.isMine);
-  const myAgents = members.filter(member => member.isMine);
-  const selectedAgent = members.find(member => member.id === selectedAgentId) || publicAgents[0];
-  const selectedSkill = allSkills.find(skill => skill.id === selectedSkillId) || allSkills[0];
-  const selectedAgentBindings = getAgentSkillBindings(selectedAgent.id);
-  const selectedAgentMastered = selectedAgentBindings.filter(binding => binding.state === "mastered");
-  const selectedAgentLearning = selectedAgentBindings.filter(binding => binding.state === "learning");
-  const skillTeachers = PLAZA_AGENT_SKILL_BINDINGS
-    .filter(binding => binding.skillId === selectedSkill.id && binding.state === "mastered")
-    .map(binding => members.find(member => member.id === binding.agentId))
-    .filter((member): member is typeof members[number] => Boolean(member));
-  const selectedLearner = myAgents.find(member => member.id === selectedLearnerId) || myAgents[0];
-  const learnerIsInterested = selectedLearner.interests.includes(selectedSkill.id);
-  const learnerHasSkill = skillLoadouts[selectedLearner.id]?.includes(selectedSkill.id) ?? false;
+  // 广场地图沿用静态视觉；agents / skills 分页的数据来自后端 DB。
+  const mapSkills = PLAZA_SKILLS;
+  const selectedDbAgent = dbPlazaAgents.find(agent => agent.id === selectedDbAgentId) || dbPlazaAgents[0] || null;
+  const selectedDbSkill = dbSkills.find(skill => skill.id === selectedDbSkillId) || dbSkills[0] || null;
+  const skillsOfDbAgent = (agentId: number) => dbSkills.filter(skill => skill.holder?.id === agentId);
+  const myPlazaAgentCount = dbPlazaAgents.filter(agent => agent.owner_id === ME_USER_ID).length;
 
-  useEffect(() => () => {
-    forgeRunRef.current += 1;
-  }, []);
-
-  const chooseSkill = (skillId: string) => {
-    setSelectedSkillId(skillId);
+  const refreshPlazaData = async () => {
+    try {
+      const [agents, skills] = await Promise.all([backendApi.plazaAgents(), backendApi.plazaSkills()]);
+      setDbPlazaAgents(agents);
+      setDbSkills(skills);
+      setDbError(null);
+      return { agents, skills };
+    } catch (caught) {
+      setDbError(caught instanceof Error ? caught.message : "后端未连接");
+      return null;
+    }
   };
 
-  const loadSelectedSkill = () => {
-    if (learnerHasSkill) return;
-    setSkillLoadouts(current => ({
-      ...current,
-      [selectedLearner.id]: [...(current[selectedLearner.id] || []), selectedSkill.id],
-    }));
+  useEffect(() => {
+    refreshPlazaData();
+    return () => {
+      forgeRunRef.current += 1;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startLearning = async () => {
+    if (!selectedDbSkill || learning) return;
+    setLearning(true);
+    setLearnError(null);
+    setLearnResult(null);
+    try {
+      const result = await backendApi.learn(selectedDbSkill.id);
+      setLearnResult({
+        lines: result.lines,
+        skill: result.skill,
+        learner: result.learner,
+        teacher: result.teacher,
+        alreadyKnown: result.already_known,
+      });
+      await refreshPlazaData();
+    } catch (caught) {
+      setLearnError(caught instanceof Error ? caught.message : "学习失败，请重试");
+    } finally {
+      setLearning(false);
+    }
   };
 
   const startSkillForge = async () => {
@@ -8088,23 +8269,47 @@ function PlazaScreen({
     setForgeDraft(null);
     setForgeManifest(null);
     setForgeMetrics(null);
+    setForgeError(null);
+    setForgeBackendSkill(null);
 
-    const result = await runSkillForgeHarness(prompt, events => {
-      if (forgeRunRef.current === runId) setForgeTrace(events);
-    });
-    if (forgeRunRef.current === runId) {
-      setForgeDraft(result.skill);
-      setForgeManifest(result.manifest);
-      setForgeMetrics(result.metrics);
-      setForgeStatus("review");
+    // 本地 harness 动画作为过场，真正的锻造由后端 /api/skills/forge 完成并落库。
+    const [animation, backend] = await Promise.all([
+      runSkillForgeHarness(prompt, events => {
+        if (forgeRunRef.current === runId) setForgeTrace(events);
+      }),
+      backendApi.forge(prompt)
+        .then(result => ({ ok: true as const, result }))
+        .catch(caught => ({ ok: false as const, message: caught instanceof Error ? caught.message : "锻造失败" })),
+    ]);
+    if (forgeRunRef.current !== runId) return;
+    if (!backend.ok) {
+      setForgeError(backend.message);
+      setForgeStatus("idle");
+      return;
     }
+    const manifest = backend.result.manifest;
+    setForgeBackendSkill(backend.result.skill);
+    setForgeDraft({
+      id: String(backend.result.skill.id),
+      name: manifest.name,
+      englishName: manifest.def_id,
+      category: manifest.category,
+      summary: manifest.description,
+      color: "#D18A3D",
+      version: "1.0",
+      source: `${backend.result.agent.name} · 锻造`,
+      capabilities: manifest.capabilities,
+    });
+    setForgeManifest(animation.manifest);
+    setForgeMetrics(animation.metrics);
+    setForgeStatus("review");
   };
 
-  const publishForgedSkill = () => {
-    if (!forgeDraft) return;
-    setCustomSkills(current => [forgeDraft, ...current.filter(skill => skill.id !== forgeDraft.id)]);
-    setSelectedSkillId(forgeDraft.id);
+  const publishForgedSkill = async () => {
+    if (!forgeBackendSkill) return;
     setForgeStatus("published");
+    await refreshPlazaData();
+    setSelectedDbSkillId(forgeBackendSkill.id);
   };
 
   return (
@@ -8121,8 +8326,10 @@ function PlazaScreen({
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#6B9E7A" }}/>
-          <span style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A" }}>6 ONLINE</span>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: dbError ? "#E8634A" : "#6B9E7A" }}/>
+          <span style={{ fontSize: "var(--ui-font-caption)", color: dbError ? "#E8634A" : "#6B9E7A" }}>
+            {dbError ? "OFFLINE" : `${dbPlazaAgents.length} ONLINE`}
+          </span>
         </div>
       </div>
 
@@ -8130,8 +8337,8 @@ function PlazaScreen({
         style={{ background: "rgba(28,25,17,.055)", border: "1px solid rgba(28,25,17,.08)" }}>
         {([
           ["square", "广场", `${members.length} 在线`],
-          ["agents", "Agents", `${publicAgents.length} 分享者`],
-          ["skills", "Skills", `${allSkills.length} 可学习`],
+          ["agents", "Agents", `${dbPlazaAgents.length} 在场`],
+          ["skills", "Skills", `${dbSkills.length} 可学习`],
         ] as const).map(([tab, label, note]) => {
           const active = plazaTab === tab;
           return (
@@ -8154,22 +8361,30 @@ function PlazaScreen({
         })}
       </div>
 
-      {plazaTab !== "square" && (
+      {plazaTab !== "square" && learnResult && (
         <div className="mx-4 mb-2 rounded-xl px-3 py-2"
           style={{ background: "#EEF3EC", border: "1px solid rgba(107,158,122,.2)" }}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5">
               <Radio size={10} color="#6B9E7A"/>
-              <span style={{ fontSize: "var(--ui-font-micro)", letterSpacing: 1, color: "#6B9E7A" }}>LIVE LEARNING</span>
+              <span style={{ fontSize: "var(--ui-font-micro)", letterSpacing: 1, color: "#6B9E7A" }}>
+                {learning ? "LIVE LEARNING" : "LEARNED"}
+              </span>
             </div>
-            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>模仿练习 · 68%</span>
+            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>
+              {learnResult.alreadyKnown ? "已掌握 · 复习交流" : "对话学习完成"}
+            </span>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>Atlas</span>
+            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>
+              {learnResult.teacher.emoji} {learnResult.teacher.name}
+            </span>
             <ArrowRight size={10} color="#8E867A"/>
-            <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>路线测绘</span>
+            <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>{learnResult.skill}</span>
             <ArrowRight size={10} color="#8E867A"/>
-            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>Miko</span>
+            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>
+              {learnResult.learner.emoji} {learnResult.learner.name}
+            </span>
           </div>
         </div>
       )}
@@ -8179,7 +8394,7 @@ function PlazaScreen({
           {plazaTab === "square" ? (
             <WebPlazaScene
               members={members}
-              skills={allSkills}
+              skills={mapSkills}
               featuredHouses={featuredHouses}
               userHouse={userHouse}
               selectingHouse={selectingHouse}
@@ -8187,132 +8402,109 @@ function PlazaScreen({
               onOpenUserWorld={onOpenUserWorld}
               focusMemberId={focusedPlazaAgentId}
               focusRequest={plazaFocusRequest}
-              onOpenAgent={agentId => {
-                setSelectedAgentId(agentId);
-                setPlazaTab("agents");
-              }}
-              onOpenSkill={skillId => {
-                setSelectedSkillId(skillId);
-                setPlazaTab("skills");
-              }}
+              onOpenAgent={() => setPlazaTab("agents")}
+              onOpenSkill={() => setPlazaTab("skills")}
             />
           ) : plazaTab === "agents" ? (
             <div>
               <div className="flex items-end justify-between mb-2">
                 <div>
-                  <p style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>SHARING AGENTS</p>
-                  <p style={{ fontSize: "var(--ui-font-caption)", marginTop: 3 }}>点击智能体，查看它能教授什么</p>
+                  <p style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>PLAZA AGENTS</p>
+                  <p style={{ fontSize: "var(--ui-font-caption)", marginTop: 3 }}>点击智能体，查看它的主人和 Skills</p>
                 </div>
-                <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>来自 3 个世界</span>
+                <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{dbPlazaAgents.length} 位在场</span>
               </div>
+              {dbError && (
+                <div className="rounded-xl px-3 py-2.5 mb-2"
+                  style={{ background: "#E8634A12", border: "1px solid #E8634A40", color: "#B5482F", fontSize: "var(--ui-font-caption)" }}>
+                  无法连接后端：{dbError}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-2">
-                {publicAgents.map(member => {
-                  const mastered = getAgentSkillBindings(member.id).filter(binding => binding.state === "mastered");
-                  const active = selectedAgent.id === member.id;
+                {dbPlazaAgents.map(agent => {
+                  const color = dbAgentColor(agent);
+                  const agentSkills = skillsOfDbAgent(agent.id);
+                  const active = selectedDbAgent?.id === agent.id;
                   return (
                     <button
-                      key={member.id}
+                      key={agent.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedAgentId(member.id);
-                        const firstSkill = mastered[0]?.skillId;
-                        if (firstSkill) chooseSkill(firstSkill);
-                      }}
+                      onClick={() => setSelectedDbAgentId(agent.id)}
                       className="rounded-2xl px-2 pt-2 pb-2 text-left"
                       style={{
-                        background: active ? `${member.color}10` : "#FAF6EF",
-                        border: `1.5px solid ${active ? member.color : "rgba(28,25,17,.1)"}`,
-                        boxShadow: active ? `0 4px 14px ${member.color}18` : "0 2px 8px rgba(28,25,17,.04)",
+                        background: active ? `${color}10` : "#FAF6EF",
+                        border: `1.5px solid ${active ? color : "rgba(28,25,17,.1)"}`,
+                        boxShadow: active ? `0 4px 14px ${color}18` : "0 2px 8px rgba(28,25,17,.04)",
                       }}
                     >
-                      <div className="h-[58px] flex items-end justify-center">{member.art}</div>
+                      <div className="h-[58px] flex items-end justify-center">
+                        <DbAgentAvatar agent={agent} size={50}/>
+                      </div>
                       <div className="h-1 mt-[-3px] mx-auto rounded-full" style={{ width: 28, background: "rgba(28,25,17,.1)" }}/>
-                      <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", fontWeight: 700, marginTop: 6 }}>{member.name}</p>
-                      <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>@{member.owner} · {member.origin}</p>
+                      <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", fontWeight: 700, marginTop: 6 }}>{agent.name}</p>
+                      <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>
+                        @{agent.owner_id === ME_USER_ID ? "我" : agent.owner_name} · {agent.category}
+                      </p>
                       <div className="mt-2">
-                        {mastered.slice(0, 1).map(binding => {
-                          const skill = getPlazaSkill(binding.skillId);
-                          if (!skill) return null;
-                          return (
-                            <span key={skill.id} className="inline-flex rounded-full px-1.5 py-1"
-                              style={{ color: skill.color, background: `${skill.color}12`, fontSize: "var(--ui-font-micro)" }}>
-                              {skill.name} · {binding.proficiency}
-                            </span>
-                          );
-                        })}
+                        {agentSkills.slice(0, 1).map(skill => (
+                          <span key={skill.id} className="inline-flex rounded-full px-1.5 py-1"
+                            style={{ color, background: `${color}12`, fontSize: "var(--ui-font-micro)" }}>
+                            {skill.emoji} {skill.name}
+                          </span>
+                        ))}
+                        {agentSkills.length === 0 && (
+                          <span className="inline-flex rounded-full px-1.5 py-1"
+                            style={{ color: "#8E867A", background: "#F0EBE2", fontSize: "var(--ui-font-micro)" }}>
+                            暂无技能
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
                 })}
               </div>
 
-              <motion.div
-                key={selectedAgent.id}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-2xl mt-2 p-3"
-                style={{ background: "#FAF6EF", border: `1.5px solid ${selectedAgent.color}35` }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>{selectedAgent.name} 的 Skill 档案</p>
-                    <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>Skill 与角色分开保存，可替换、升级和回滚</p>
-                  </div>
-                  <Share2 size={13} color={selectedAgent.color}/>
-                </div>
-                <div className="mt-2">
-                  <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>已掌握 · 可教授</p>
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {selectedAgentMastered.map(binding => {
-                      const skill = getPlazaSkill(binding.skillId);
-                      if (!skill) return null;
-                      return (
-                        <button
-                          key={skill.id}
-                          type="button"
-                          onClick={() => chooseSkill(skill.id)}
-                          className="rounded-full px-2 py-1.5"
-                          style={{
-                            background: selectedSkill.id === skill.id ? skill.color : `${skill.color}12`,
-                            color: selectedSkill.id === skill.id ? "white" : skill.color,
-                            border: `1px solid ${skill.color}35`,
-                            fontSize: "var(--ui-font-micro)",
-                          }}
-                        >
-                          {skill.name} · 熟练度 {binding.proficiency}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                {selectedAgentLearning.length > 0 && (
-                  <div className="mt-2">
-                    <span style={{ color: "#4A7FA5", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>正在学习</span>
-                    <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginLeft: 8 }}>
-                      {getPlazaSkill(selectedAgentLearning[0].skillId)?.name} · {selectedAgentLearning[0].proficiency}%
-                    </span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFocusedPlazaAgentId(selectedAgent.id);
-                    setPlazaFocusRequest(current => current + 1);
-                    setPlazaTab("square");
-                  }}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5"
-                  style={{
-                    color: selectedAgent.color,
-                    background: `${selectedAgent.color}10`,
-                    border: `1.5px solid ${selectedAgent.color}45`,
-                    fontSize: "var(--ui-font-caption)",
-                  }}
+              {selectedDbAgent && (
+                <motion.div
+                  key={selectedDbAgent.id}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl mt-2 p-3"
+                  style={{ background: "#FAF6EF", border: `1.5px solid ${dbAgentColor(selectedDbAgent)}35` }}
                 >
-                  <MapPin size={13}/>
-                  去广场看他
-                  <ArrowRight size={12}/>
-                </button>
-              </motion.div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>{selectedDbAgent.name} 的档案</p>
+                      <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>
+                        主人：{selectedDbAgent.owner_name} · {selectedDbAgent.category} · 心情 {selectedDbAgent.mood}
+                      </p>
+                    </div>
+                    <Share2 size={13} color={dbAgentColor(selectedDbAgent)}/>
+                  </div>
+                  <p style={{ color: "#6F685D", fontSize: "var(--ui-font-caption)", lineHeight: 1.6, marginTop: 8 }}>
+                    {selectedDbAgent.trait}
+                  </p>
+                  <div className="mt-2">
+                    <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>已掌握 · 可教授</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {skillsOfDbAgent(selectedDbAgent.id).map(skill => (
+                        <span key={skill.id} className="rounded-full px-2 py-1.5"
+                          style={{
+                            background: `${dbAgentColor(selectedDbAgent)}12`,
+                            color: dbAgentColor(selectedDbAgent),
+                            border: `1px solid ${dbAgentColor(selectedDbAgent)}35`,
+                            fontSize: "var(--ui-font-micro)",
+                          }}>
+                          {skill.emoji} {skill.name}
+                        </span>
+                      ))}
+                      {skillsOfDbAgent(selectedDbAgent.id).length === 0 && (
+                        <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>暂无技能</span>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </div>
           ) : (
             <div>
@@ -8336,8 +8528,17 @@ function PlazaScreen({
                       <p style={{ fontSize: "var(--ui-font-label)", marginTop: 4 }}>把一个想法研究成可加载的 Skill</p>
                     </div>
                   </div>
-                  <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{customSkills.length} 个自定义</span>
+                  <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>
+                    {dbSkills.filter(skill => skill.source === "user").length} 个自定义
+                  </span>
                 </div>
+
+                {forgeError && (
+                  <div className="rounded-xl px-3 py-2 mt-3"
+                    style={{ background: "#E8634A12", border: "1px solid #E8634A40", color: "#B5482F", fontSize: "var(--ui-font-caption)" }}>
+                    锻造失败：{forgeError}
+                  </div>
+                )}
 
                 <textarea
                   value={forgePrompt}
@@ -8402,7 +8603,7 @@ function PlazaScreen({
                               <span style={{ color: "#FAF6EF", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>HARNESS TRACE</span>
                               <span className="rounded px-1 py-0.5"
                                 style={{ color: "#E6B873", background: "rgba(209,138,61,.12)", fontSize: "var(--ui-font-micro)" }}>
-                                LOCAL ENGINE
+                                FORGE API
                               </span>
                             </div>
                             <span style={{ color: "#827B71", fontSize: "var(--ui-font-micro)" }}>
@@ -8596,39 +8797,45 @@ function PlazaScreen({
               <div className="flex items-end justify-between mb-2">
                 <div>
                   <p style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>SHARED SKILLS</p>
-                  <p style={{ fontSize: "var(--ui-font-caption)", marginTop: 3 }}>按兴趣选择，再让你的智能体发起交流</p>
+                  <p style={{ fontSize: "var(--ui-font-caption)", marginTop: 3 }}>在场智能体的全部技能 · 选一个发起对话学习</p>
                 </div>
                 <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>来源可追溯</span>
               </div>
+              {dbError && (
+                <div className="rounded-xl px-3 py-2.5 mb-2"
+                  style={{ background: "#E8634A12", border: "1px solid #E8634A40", color: "#B5482F", fontSize: "var(--ui-font-caption)" }}>
+                  无法连接后端：{dbError}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
-                {allSkills.map(skill => {
-                  const active = skill.id === selectedSkill.id;
-                  const teacherCount = PLAZA_AGENT_SKILL_BINDINGS.filter(
-                    binding => binding.skillId === skill.id && binding.state === "mastered",
-                  ).length;
+                {dbSkills.map(skill => {
+                  const active = selectedDbSkill?.id === skill.id;
+                  const color = dbAgentColor(skill);
                   return (
                     <button
                       key={skill.id}
                       type="button"
-                      onClick={() => chooseSkill(skill.id)}
+                      onClick={() => setSelectedDbSkillId(skill.id)}
                       className="rounded-2xl p-2.5 text-left"
                       style={{
-                        background: active ? `${skill.color}10` : "#FAF6EF",
-                        border: `1.5px solid ${active ? skill.color : "rgba(28,25,17,.1)"}`,
+                        background: active ? `${color}10` : "#FAF6EF",
+                        border: `1.5px solid ${active ? color : "rgba(28,25,17,.1)"}`,
                       }}
                     >
                       <div className="flex items-center justify-between">
                         <span className="w-6 h-6 rounded-lg flex items-center justify-center"
-                          style={{ background: `${skill.color}16`, color: skill.color }}>
-                          <Zap size={12}/>
+                          style={{ background: `${color}16`, color, fontSize: 13 }}>
+                          {skill.emoji || <Zap size={12}/>}
                         </span>
-                        <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>v{skill.version}</span>
+                        <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{skill.source}</span>
                       </div>
                       <p style={{ fontSize: "var(--ui-font-body)", marginTop: 7 }}>{skill.name}</p>
-                      <p style={{ color: skill.color, fontSize: "var(--ui-font-micro)", marginTop: 3 }}>{skill.englishName}</p>
+                      <p className="truncate" style={{ color, fontSize: "var(--ui-font-micro)", marginTop: 3 }}>{skill.summary}</p>
                       <div className="flex items-center justify-between mt-2">
-                        <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{teacherCount} 位智能体可教授</span>
-                        <span className="rounded-full px-1.5 py-0.5" style={{ color: skill.color, background: `${skill.color}12`, fontSize: "var(--ui-font-micro)" }}>{skill.category}</span>
+                        <span className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>
+                          {skill.holder ? `${skill.holder.emoji} ${skill.holder.name} 可教授` : "无持有者"}
+                        </span>
+                        <span className="rounded-full px-1.5 py-0.5 shrink-0" style={{ color, background: `${color}12`, fontSize: "var(--ui-font-micro)" }}>{skill.category}</span>
                       </div>
                     </button>
                   );
@@ -8638,80 +8845,88 @@ function PlazaScreen({
           )}
         </div>
 
-        {plazaTab !== "square" && (
+        {plazaTab === "skills" && selectedDbSkill && (
           <div className="rounded-2xl p-3 shrink-0"
-            style={{ background: "#FAF6EF", border: `1.5px solid ${selectedSkill.color}40`, boxShadow: "0 5px 18px rgba(28,25,17,.07)" }}>
+            style={{ background: "#FAF6EF", border: `1.5px solid ${dbAgentColor(selectedDbSkill)}40`, boxShadow: "0 5px 18px rgba(28,25,17,.07)" }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="rounded-full px-1.5 py-1" style={{ color: selectedSkill.color, background: `${selectedSkill.color}12`, fontSize: "var(--ui-font-micro)" }}>
-                  {selectedSkill.category}
+                <span className="rounded-full px-1.5 py-1"
+                  style={{ color: dbAgentColor(selectedDbSkill), background: `${dbAgentColor(selectedDbSkill)}12`, fontSize: "var(--ui-font-micro)" }}>
+                  {selectedDbSkill.category}
                 </span>
-                <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{selectedSkill.source} · v{selectedSkill.version}</span>
+                <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>{selectedDbSkill.source}</span>
               </div>
-              <p style={{ fontSize: "var(--ui-font-label)", marginTop: 5 }}>{selectedSkill.name}</p>
-              <p className="truncate" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginTop: 4 }}>{selectedSkill.summary}</p>
+              <p style={{ fontSize: "var(--ui-font-label)", marginTop: 5 }}>{selectedDbSkill.emoji} {selectedDbSkill.name}</p>
+              <p className="truncate" style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginTop: 4 }}>{selectedDbSkill.summary}</p>
             </div>
-            <div className="flex -space-x-1">
-              {skillTeachers.map(teacher => (
-                <span key={teacher.id} title={`${teacher.name} 可以教授`} className="w-6 h-6 rounded-full flex items-center justify-center"
-                  style={{ background: `${teacher.color}18`, border: "1px solid #FAF6EF", color: teacher.color, fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-body)" }}>
-                  {teacher.name.slice(0, 1)}
+            {selectedDbSkill.holder && (
+              <span title={`${selectedDbSkill.holder.name} 可以教授`} className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                style={{ background: `${dbAgentColor(selectedDbSkill)}18`, border: "1px solid #FAF6EF", fontSize: 14 }}>
+                {selectedDbSkill.holder.emoji}
+              </span>
+            )}
+          </div>
+          {selectedDbSkill.capabilities.length > 0 && (
+            <div className="flex gap-1 mt-2 overflow-hidden">
+              {selectedDbSkill.capabilities.map(capability => (
+                <span key={capability} className="rounded-full px-2 py-1 whitespace-nowrap"
+                  style={{ color: "#6F685D", background: "#F0EBE2", fontSize: "var(--ui-font-micro)" }}>
+                  {capability}
                 </span>
               ))}
             </div>
-          </div>
-          <div className="flex gap-1 mt-2 overflow-hidden">
-            {selectedSkill.capabilities.map(capability => (
-              <span key={capability} className="rounded-full px-2 py-1 whitespace-nowrap"
-                style={{ color: "#6F685D", background: "#F0EBE2", fontSize: "var(--ui-font-micro)" }}>
-                {capability}
-              </span>
-            ))}
-          </div>
-          <div className="grid grid-cols-[112px_1fr] gap-2 mt-2">
-            <div className="relative rounded-xl flex items-center px-2"
-              style={{ height: 34, background: "#F0EBE2", border: "1px solid rgba(28,25,17,.08)" }}>
-              <select
-                aria-label="选择学习这个 Skill 的智能体"
-                value={selectedLearner.id}
-                onChange={event => setSelectedLearnerId(event.target.value)}
-                style={{
-                  width: "100%",
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                  background: "transparent",
-                  border: 0,
-                  outline: 0,
-                  color: selectedLearner.color,
-                  fontSize: "var(--ui-font-caption)",
-                }}
-              >
-                {myAgents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-              </select>
-              <ChevronDown size={10} style={{ position: "absolute", right: 8, pointerEvents: "none", color: "#8E867A" }}/>
+          )}
+          {learnResult && (
+            <div className="mt-2 rounded-xl p-2 flex flex-col gap-1.5"
+              style={{ background: "#F0EBE2", border: "1px solid rgba(28,25,17,.08)", maxHeight: 150, overflowY: "auto" }}>
+              {learnResult.lines.map((line, index) => {
+                const isLearner = line.agent_id === learnResult.learner.id;
+                return (
+                  <div key={index} className={`flex ${isLearner ? "justify-end" : "justify-start"}`}>
+                    <span className="rounded-xl px-2 py-1.5"
+                      style={{
+                        maxWidth: "85%",
+                        background: isLearner ? "#E8634A14" : "#FAF6EF",
+                        color: "#1C1911",
+                        fontSize: "var(--ui-font-micro)",
+                        lineHeight: 1.55,
+                      }}>
+                      <span style={{ color: isLearner ? "#E8634A" : "#579447" }}>{line.emoji} {line.name}：</span>
+                      {line.text}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              onClick={loadSelectedSkill}
-              disabled={learnerHasSkill}
-              className="rounded-xl flex items-center justify-center gap-1.5"
-              style={{
-                height: 34,
-                border: 0,
-                background: learnerHasSkill ? "#E7E2D8" : "#1C1911",
-                color: learnerHasSkill ? "#8E867A" : "#FAF6EF",
-                fontSize: "var(--ui-font-caption)",
-              }}
-            >
-              {learnerHasSkill ? <Check size={11}/> : <Plus size={11}/>}
-              {learnerHasSkill ? "已加载到智能体" : learnerIsInterested ? "感兴趣 · 请求学习" : "加载并请求学习"}
-            </button>
-          </div>
-          <p style={{ color: learnerIsInterested ? selectedSkill.color : "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
-            {learnerIsInterested
-              ? `${selectedLearner.name} 对这个 Skill 有较高兴趣，会主动与分享者交流。`
-              : `加载只创建独立绑定，不会改变 ${selectedLearner.name} 的人格与原始记忆。`}
+          )}
+          {learnError && (
+            <p style={{ color: "#B5482F", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>{learnError}</p>
+          )}
+          <button
+            type="button"
+            onClick={startLearning}
+            disabled={learning || !selectedDbSkill.holder}
+            className="w-full rounded-xl flex items-center justify-center gap-1.5 mt-2"
+            style={{
+              height: 34,
+              border: 0,
+              background: learning ? "#E7E2D8" : "#1C1911",
+              color: learning ? "#8E867A" : "#FAF6EF",
+              fontSize: "var(--ui-font-caption)",
+            }}
+          >
+            {learning ? <Loader2 size={11} className="animate-spin"/> : <Plus size={11}/>}
+            {learning
+              ? "对话学习中…"
+              : selectedDbSkill.holder
+                ? `随机派我的广场伙伴向 ${selectedDbSkill.holder.name} 学习`
+                : "该技能暂无持有者"}
+          </button>
+          <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
+            {myPlazaAgentCount > 0
+              ? `你有 ${myPlazaAgentCount} 位伙伴在广场上，系统会随机挑一位去对话学习。`
+              : "你还没有伙伴在广场上——先在 Inventory 里把一位伙伴派到广场吧。"}
           </p>
           </div>
         )}
@@ -9105,7 +9320,7 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
           fontSize: "var(--ui-font-caption)",
         }}
       >
-        Skills
+        Agents
       </button>
       <button
         type="button"
@@ -9190,6 +9405,9 @@ export default function App() {
   const [agentDrafts, setAgentDrafts] = useState<Record<string, AgentEditorDraft>>(initialAgentDrafts);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<AgentEditorDraft>(() => defaultAgentDraft(AGENT_PROFILES[0]));
+  // 后端 DB 中我的 agents（inventory 日常精灵 + identity 编辑）
+  const [dbMyAgents, setDbMyAgents] = useState<BackendAgent[]>([]);
+  const [editingDbAgent, setEditingDbAgent] = useState<BackendAgent | null>(null);
 
   // Home tab sub-state: worldDock + 3 worlds
   const [homeSub, setHomeSub] = useState<HomeScene>("worldDock");
@@ -9208,16 +9426,40 @@ export default function App() {
   const [characterSettingType, setCharacterSettingType] = useState<WorldStyleSkillAssetType | undefined>();
 
   const [detailScreen, setDetailScreen] = useState<Screen | null>(null);
-  const activeProfile = ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
+  const dbAgentProfile = (agent: BackendAgent): AgentProfile => ({
+    id: `db-${agent.id}`,
+    name: agent.name,
+    role: agent.category,
+    world: agent.world,
+    memories: 0,
+    color: dbAgentColor(agent),
+    render: (s, animated) => agent.sprite_url
+      ? <PetSpriteAgent src={resolveApiAssetUrl(agent.sprite_url)} size={80 * s} animated={animated}/>
+      : <text x={0} y={10 * s} textAnchor="middle" fontSize={30 * s}>{agent.emoji}</text>,
+  });
+  const activeProfile = (editingDbAgent && editingAgentId === `db-${editingDbAgent.id}`)
+    ? dbAgentProfile(editingDbAgent)
+    : ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
   const editingExistingAgent = editingAgentId !== null;
+
+  const refreshMyAgents = () => {
+    backendApi.agents(ME_USER_ID).then(setDbMyAgents).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (bottomTab === "gallery") refreshMyAgents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bottomTab]);
 
   const prepareCapturedPet = (asset: PetAsset) => {
     setLatestCapturedPet(asset);
+    refreshMyAgents();
   };
 
   const registerCapturedPet = (asset: PetAsset) => {
     setLatestCapturedPet(asset);
     setCapturedPets(current => [asset, ...current.filter(item => item.id !== asset.id)]);
+    refreshMyAgents();
   };
 
   const updateCreatorDraft = (patch: Partial<WorldCreatorDraft>) => {
@@ -9325,8 +9567,29 @@ export default function App() {
   const openAgentEditor = (agentId: string) => {
     const profile = ALL_AGENT_PROFILES.find(agent => agent.id === agentId);
     if (!profile) return;
+    setEditingDbAgent(null);
     setEditingAgentId(agentId);
     setEditorDraft({ ...(agentDrafts[agentId] || defaultAgentDraft(profile)) });
+    setBottomTab("gallery");
+    setGallerySub("identity");
+    setDetailScreen(null);
+  };
+
+  const openDbAgentEditor = (agent: BackendAgent) => {
+    let saved: Partial<AgentEditorDraft> = {};
+    try {
+      saved = agent.profile ? JSON.parse(agent.profile) : {};
+    } catch {
+      saved = {};
+    }
+    setEditingDbAgent(agent);
+    setEditingAgentId(`db-${agent.id}`);
+    setEditorDraft({
+      ...defaultAgentDraft(dbAgentProfile(agent)),
+      name: agent.name,
+      personality: agent.trait || "",
+      ...saved,
+    });
     setBottomTab("gallery");
     setGallerySub("identity");
     setDetailScreen(null);
@@ -9361,6 +9624,7 @@ export default function App() {
 
   const cancelAgentEditor = () => {
     setEditingAgentId(null);
+    setEditingDbAgent(null);
     setBottomTab("gallery");
     setGallerySub("agents");
     setDetailScreen(null);
@@ -9395,9 +9659,19 @@ export default function App() {
   };
 
   const finishAgentEditor = () => {
+    if (editingDbAgent) {
+      // identity 编辑完成 → 写回后端 DB 并标记加入世界
+      backendApi.patchAgent(editingDbAgent.id, {
+        name: editorDraft.name || editingDbAgent.name,
+        trait: editorDraft.personality || editingDbAgent.trait,
+        in_world: true,
+        profile: { ...editorDraft },
+      }).then(() => refreshMyAgents()).catch(() => {});
+    }
     if (editingAgentId) {
       setAgentDrafts(current => ({ ...current, [editingAgentId]: { ...editorDraft } }));
       setEditingAgentId(null);
+      setEditingDbAgent(null);
       setBottomTab("gallery");
       setGallerySub("agents");
       setDetailScreen(null);
@@ -9490,7 +9764,7 @@ export default function App() {
         return (
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="flex-1 overflow-hidden flex flex-col">
-              {homeView === "civilization" && <AgentGrowthScreen sceneControl={sceneControl}/>}
+              {homeView === "civilization" && <AgentsDirectoryScreen sceneControl={sceneControl}/>}
               {homeView === "chainPlaza" && <ChainPlazaScreen sceneControl={sceneControl}/>}
               {homeView === "plaza" && (
                 <PlazaScreen
@@ -9627,6 +9901,8 @@ export default function App() {
                   onEditAgent={openAgentEditor}
                   onOpenSetting={openCharacterSettings}
                   capturedPets={capturedPets}
+                  dbAgents={dbMyAgents}
+                  onEditDbAgent={openDbAgentEditor}
                 />
               )}
               {gallerySub === "styleSetting" && (
@@ -9648,7 +9924,6 @@ export default function App() {
                   editing={editingExistingAgent}
                   onCancel={cancelAgentEditor}
                   onRestore={restoreAgentEditor}
-                  archiveTabs={archiveTabs}
                 />
               )}
               {gallerySub === "chain" && <AgentChainScreen archiveTabs={archiveTabs}/>}
@@ -9682,7 +9957,7 @@ export default function App() {
   const BOTTOM_TABS = [
     { id: "home"    as BottomTab, icon: <Home size={22}/>,    label: "Home"    },
     { id: "capture" as BottomTab, icon: <Camera size={22}/>,  label: "Capture" },
-    { id: "gallery" as BottomTab, icon: <Package size={22}/>, label: "Agents" },
+    { id: "gallery" as BottomTab, icon: <Package size={22}/>, label: "Inventory" },
   ];
 
   return (

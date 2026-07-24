@@ -16,6 +16,7 @@ export type PetAsset = {
   personality?: string[];
   temperament?: string;
   registeredAt?: string;
+  agentId?: number;
 };
 
 export type PetJob = {
@@ -29,7 +30,7 @@ export type PetJob = {
   asset?: PetAsset;
 };
 
-const API_BASE = (import.meta.env.VITE_WORLD_API_URL || "http://127.0.0.1:8787/api").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_WORLD_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
 const API_ORIGIN = API_BASE.replace(/\/api$/, "");
 
 function absoluteAssetUrls(asset: PetAsset): PetAsset {
@@ -83,6 +84,13 @@ export const petApi = {
     }));
   },
 
+  async register(id: string): Promise<PetAsset> {
+    const payload = await readJson<{ asset: PetAsset }>(await fetchApi(`${API_BASE}/pets/${id}/register`, {
+      method: "POST",
+    }));
+    return absoluteAssetUrls(payload.asset);
+  },
+
   async localize(asset: PetAsset): Promise<PetAsset> {
     const blobs = await Promise.all(
       [asset.sourceUrl, asset.cleanUrl, asset.finalUrl].map(async url => {
@@ -112,7 +120,9 @@ export async function waitForPet(submitted: PetJob, onProgress: (job: PetJob) =>
     const job = await petApi.getJob(submitted.id, submitted.accessToken);
     onProgress(job);
     if (job.status === "ready" && job.asset) {
-      const localAsset = await petApi.localize(job.asset);
+      // 自动建档：生成人设并写入后端 DB（inventory 日常精灵）。失败时仍返回本机资产。
+      const registered = await petApi.register(job.id).catch(() => null);
+      const localAsset = await petApi.localize(registered ?? job.asset);
       await petApi.release(job.id, job.accessToken);
       return localAsset;
     }
