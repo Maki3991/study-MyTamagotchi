@@ -305,6 +305,7 @@ function WorldCanvas({
   onDecorationMove,
   onDecorationRemove,
   onSpeakerChange,
+  overrideSpeech = null,
 }: {
   config: ThemedWorldConfig;
   residents: ThemedWorldResident[];
@@ -313,6 +314,8 @@ function WorldCanvas({
   onDecorationMove?: (id: number, x: number, y: number) => void;
   onDecorationRemove?: (id: number) => void;
   onSpeakerChange?: (residentId: string) => void;
+  /** 主人日记的 agent 回复：显示在该居民头上，优先于自动轮播对话。 */
+  overrideSpeech?: { residentId: string; name: string; text: string } | null;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const initialMotionRef = useRef<ResidentMotion[] | null>(null);
@@ -545,6 +548,12 @@ function WorldCanvas({
       || motionRef.current[index]
       || SAFE_START_FALLBACKS[index % SAFE_START_FALLBACKS.length];
   const activePosition = residentPosition(activeResidentIndex);
+  const overrideResidentIndex = overrideSpeech
+    ? residents.findIndex(resident => resident.id === overrideSpeech.residentId)
+    : -1;
+  const overridePosition = overrideSpeech
+    ? residentPosition(Math.max(0, overrideResidentIndex))
+    : null;
   const relationPartnerIndexes = [1, Math.ceil(residents.length / 2)]
     .map(offset => (activeResidentIndex + offset) % residents.length)
     .filter((index, position, indexes) => index !== activeResidentIndex && indexes.indexOf(index) === position);
@@ -589,7 +598,7 @@ function WorldCanvas({
         ))}
       </div>
 
-      {!compact && activeLine && relationPartnerIndexes.length > 0 && (
+      {!compact && !overrideSpeech && activeLine && relationPartnerIndexes.length > 0 && (
         <svg className="fixed-world-relations" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {relationPartnerIndexes.map(index => {
             const partnerPosition = residentPosition(index);
@@ -651,7 +660,9 @@ function WorldCanvas({
       {residents.map((resident, index) => {
         if (resident.visitor && !compact && resident.id !== visibleVisitorId) return null;
         const position = residentPosition(index);
-        const isSpeaking = !compact && resident.id === activeLine?.speakerId;
+        const isSpeaking = !compact && (overrideSpeech
+          ? resident.id === overrideSpeech.residentId
+          : resident.id === activeLine?.speakerId);
         return (
           <button
             type="button"
@@ -678,7 +689,20 @@ function WorldCanvas({
 
       {!compact && (
         <>
-          {speechVisible && activeLine && (
+          {overrideSpeech && overridePosition && (
+            <div
+              className={`fixed-world-speech is-owner-reply ${overridePosition.x > 0.68 ? "is-right" : overridePosition.x >= 0.32 ? "is-center" : ""} ${overridePosition.y < 0.38 ? "is-below" : ""}`}
+              key={`owner-reply-${overrideSpeech.text.slice(0, 8)}`}
+              style={{
+                "--speech-x": `${overridePosition.x * 100}%`,
+                "--speech-y": `${overridePosition.y * 100}%`,
+              } as CSSProperties}
+            >
+              <span>{overrideSpeech.name} · 回应主人</span>
+              <p>{overrideSpeech.text}</p>
+            </div>
+          )}
+          {speechVisible && activeLine && !overrideSpeech && (
             <div
               className={`fixed-world-speech ${activePosition.x > 0.68 ? "is-right" : activePosition.x >= 0.32 ? "is-center" : ""} ${activePosition.y < 0.38 ? "is-below" : ""}`}
               key={`${config.id}-${lineIndex}`}
@@ -695,7 +719,7 @@ function WorldCanvas({
             <span><Radio size={9} /> {residents.length === 0 ? "EMPTY WORLD" : "WORLD TOPIC"}</span>
             <p>
               {residents.length === 0
-                ? "还没有居民 —— 去 Inventory 编辑你的 agent，加入这个世界吧。"
+                ? "还没有居民 —— 去 Capture 拍一只，或在 Inventory 图鉴里复制一只吧。"
                 : config.topics.join(" · ")}
             </p>
           </div>
@@ -745,6 +769,7 @@ export function ThemedWorldScreen({
   onOpenBuild,
   onCapture,
   onBack,
+  onSendDiary,
 }: {
   config: ThemedWorldConfig;
   residents: ThemedWorldResident[];
@@ -755,10 +780,41 @@ export function ThemedWorldScreen({
   onOpenBuild: () => void;
   onCapture: () => void;
   onBack: () => void;
+  /** 主人输入日记/心情 → 后端挑一位本世界 agent 记忆并回复。 */
+  onSendDiary?: (text: string) => Promise<{ residentId: string; name: string; text: string } | null>;
 }) {
   const { world, error } = useWorldEvolution(3500);
   const [activeResidentId, setActiveResidentId] = useState(residents[0]?.id || "");
   const [learningProgressOpen, setLearningProgressOpen] = useState(false);
+  const [diaryText, setDiaryText] = useState("");
+  const [diarySending, setDiarySending] = useState(false);
+  const [diaryError, setDiaryError] = useState("");
+  const [ownerReply, setOwnerReply] = useState<{ residentId: string; name: string; text: string } | null>(null);
+  const ownerReplyTimer = useRef<number | null>(null);
+
+  const submitDiary = async () => {
+    const text = diaryText.trim();
+    if (!text || diarySending || !onSendDiary) return;
+    setDiarySending(true);
+    setDiaryError("");
+    try {
+      const reply = await onSendDiary(text);
+      setDiaryText("");
+      if (reply) {
+        setOwnerReply(reply);
+        if (ownerReplyTimer.current) window.clearTimeout(ownerReplyTimer.current);
+        ownerReplyTimer.current = window.setTimeout(() => setOwnerReply(null), 12000);
+      }
+    } catch (caught) {
+      setDiaryError(caught instanceof Error ? caught.message : "发送失败，请重试");
+    } finally {
+      setDiarySending(false);
+    }
+  };
+
+  useEffect(() => () => {
+    if (ownerReplyTimer.current) window.clearTimeout(ownerReplyTimer.current);
+  }, []);
   const [chainReceiptVisible, setChainReceiptVisible] = useState(false);
   const [chainCallPending, setChainCallPending] = useState(false);
   const [chainCallError, setChainCallError] = useState("");
@@ -843,6 +899,7 @@ export function ThemedWorldScreen({
           onDecorationMove={onDecorationMove}
           onDecorationRemove={onDecorationRemove}
           onSpeakerChange={setActiveResidentId}
+          overrideSpeech={ownerReply}
         />
         <button
           type="button"
@@ -865,6 +922,28 @@ export function ThemedWorldScreen({
         </button>
       </section>
 
+      {onSendDiary && (
+        <div className="themed-world-diary">
+          <input
+            type="text"
+            value={diaryText}
+            onChange={event => setDiaryText(event.target.value)}
+            onKeyDown={event => { if (event.key === "Enter") submitDiary(); }}
+            placeholder="写点日记或现在的心情，说给这里的伙伴听…"
+            disabled={diarySending}
+            aria-label="给这个世界的伙伴写日记"
+          />
+          <button
+            type="button"
+            onClick={submitDiary}
+            disabled={diarySending || !diaryText.trim()}
+            aria-label="发送日记"
+          >
+            {diarySending ? "…" : "发送"}
+          </button>
+          {diaryError && <em>{diaryError}</em>}
+        </div>
+      )}
       <footer className="themed-world-screen__footer">
         <button type="button" className="themed-world-screen__progress" onClick={() => setLearningProgressOpen(true)}>
           <BookOpen size={11}/>

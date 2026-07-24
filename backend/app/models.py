@@ -14,19 +14,20 @@ class User(SQLModel, table=True):
     avatar: str = "🙂"
 
 
+# agent 唯一的位置字段：一定在自己的三个世界之一或广场，没有其他选项
+AGENT_LOCATIONS = ("vitality-gym-town", "learning-commons", "maker-harbor", "plaza")
+
+
 class Agent(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     owner_id: int = Field(foreign_key="user.id")
     name: str
     category: str
-    image: str = ""  # 线条风角色图 URL（由 capture 管线生成，如 /api/pets/{id}/files/final）
+    image: str = ""  # agent 外表：capture 管线生成的角色图 URL（如 /api/pets/{id}/files/final）
     trait: str = ""
     mood: int = 80  # 0-100
-    location: str = "home"  # home | plaza
-    world: str = "everyday"  # everyday | stardom | future
-    sprite_url: str = ""  # 拍照生成的透明角色图（/api/pets/{id}/files/final）
-    profile: str = ""  # JSON: identity 编辑字段（role/personality/goal/ability/fear/privacy/animation/movement/placementMode）
-    in_world: bool = False  # inventory 中的 agent 需经过 identity 编辑后才加入世界
+    location: str = "vitality-gym-town"  # AGENT_LOCATIONS 之一
+    profile: str = ""  # JSON: identity 字段 + memory_digest（随与主人/其他 agent 的互动持续更新）
     created_at: datetime = Field(default_factory=now)
     last_interact_at: datetime = Field(default_factory=now)
 

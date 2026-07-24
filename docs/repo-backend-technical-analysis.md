@@ -12,9 +12,7 @@
 - OpenRouter 文字、視覺與圖片模型
 - 智譜 GLM 世界生成與世界互訪模組
 
-畫面裡 Agent 自動冒出的聊天泡泡，是「世界演化事件」生成的，不是使用者直接與 Agent 聊天。
-
-一對一聊天 API 已完成，但前端目前沒有實際呼叫。repo 內還存在一套 Node.js 世界引擎，功能與資料模型更完整，但它與 FastAPI 不是同一條主線；部分文件描述的 Redis、MQTT、完整 WebSocket 等架構也尚未在目前主服務落地。
+畫面裡 Agent 自動冒出的聊天泡泡，可能是「世界演化事件」生成 2. 使用者直接與 Agent 聊天。
 
 ---
 
@@ -169,24 +167,6 @@ Content-Type: application/json
 可以带一点符合物品身份的小动作描写（用括号）。
 ```
 
-#### 目前的重要限制
-
-前端 client 已經定義 `backendApi.chat()`，但目前沒有 UI 實際呼叫它。
-
-因此：
-
-- 後端一對一聊天功能存在。
-- 畫面上的城鎮泡泡不是來自這個 API。
-- 若 Demo 要展示「我跟自己的 Agent 說話，它記住了」，還需要補聊天 UI 或用 API 操作介面展示。
-
-另外，目前只保存使用者訊息：
-
-```text
-主人对我说：今天工作好累
-```
-
-LLM 回覆本身沒有存入 Memory，因此目前不是完整的 conversation history。
-
 ### 2.4 Node 版聊天
 
 Node 世界引擎另有：
@@ -215,6 +195,7 @@ gpt-4.1-mini
 ```
 
 Demo Day 不應把 Node 版與 FastAPI 版混著講。
+--> **忽略**node版
 
 ---
 
@@ -329,16 +310,6 @@ Memory 分布：
 
 > 基於 SQLite 的 append-only episodic memory，使用 recency window 注入 Prompt。
 
-目前不能宣稱已經具備：
-
-- 長期語意記憶
-- 向量檢索
-- 自動摘要
-- importance-based retrieval
-- 記憶衰退
-- Memory consolidation
-- 完整 reflection-based learning
-
 ### 3.5 Node 版 Memory schema
 
 Node 版的 JSON world state 比 FastAPI 詳細：
@@ -398,6 +369,9 @@ Node 版限制：
 - Memory importance 固定為 3
 
 因此 UI 雖然寫著「自我進化、關係、人格版本」，現行 FastAPI 後端尚未完整實現 Node 版那套演化模型。
+
+
+
 
 ---
 
@@ -511,158 +485,16 @@ backend/uploads/pets/{job_id}/
 
 Job metadata 會存到磁碟，因此具有基本的重啟恢復與 retry 能力。
 
-### 4.4 世界互訪與靈魂契合
-
-這是另一條以智譜 GLM 為主的 pipeline。
-
-#### URL → Profile
-
-```text
-URL
-→ Jina Reader
-→ GLM-4-Flash
-→ 結構化個人画像 JSON
-```
-
-Profile schema 主要包含：
-
-```json
-{
-  "name": "",
-  "title": "",
-  "one_liner": "",
-  "intro": "",
-  "tags": [],
-  "skills_or_works": [],
-  "personality": [],
-  "facts": [],
-  "source_guess": ""
-}
-```
-
-#### Profile → World
-
-```text
-Profile
-→ GLM-4-Plus
-→ 3–5 個預製類型地標
-→ Schema validation
-→ 失敗重試一次
-```
-
-Prompt 限制地標只能從 30 種預製素材中選。這是很適合 Demo Day 說明的工程策略：
-
-> LLM 負責選擇、命名與敘事；確定性的前端渲染系統負責把合法地標放進世界。
-
-#### 兩個世界互訪
-
-後端同時發出三個 GLM-4-Plus 呼叫：
-
-1. A 的使者參觀 B。
-2. B 的使者參觀 A。
-3. 計算兩個世界的 Soul Resonance。
-
-回傳：
-
-```json
-{
-  "travelogue_a": {
-    "bubbles": [],
-    "travelogue": ""
-  },
-  "travelogue_b": {
-    "bubbles": [],
-    "travelogue": ""
-  },
-  "resonance": {
-    "score": 82,
-    "line": "你們都把未完成的東西放在最顯眼的位置",
-    "opener": "聊聊各自最捨不得放棄的作品",
-    "hardware_feedback": {
-      "led_rgb": "#E0A75D",
-      "pattern": "breath",
-      "epoch_ms": 123456789
-    }
-  }
-}
-```
-
-共享契約：
-
-- `contracts/world.schema.json`
-- `contracts/visit_result.schema.json`
-- `contracts/bump_event.schema.json`
-
 ---
 
 ## 五、Demo Day 前需要修正或講清楚的問題
 
 | 問題 | 現況 |
 |---|---|
-| 兩套後端 | FastAPI 與 Node 世界引擎並存，資料模型不同 |
-| 啟動指令不一致 | mobile 的 `npm run dev` 啟動 Node `:8787`，但 Vite proxy 指向 FastAPI `:8000` |
-| 一對一聊天未接 UI | API 已完成，前端只有 client function，沒有畫面使用 |
-| 回覆沒有寫入 Memory | 只保存主人說的話 |
 | 自我進化展示超前 | FastAPI 的 reflection、relationship、personalityVersion 尚未真正演化 |
-| 世界互訪資料不持久 | `_worlds`、`_visits` 只存在 process memory，重啟即消失 |
 | WebSocket 尚未完成 | 目前只有 hello + echo，沒有 `world_ready` / `visit_ready` 推送 |
 | Redis / MQTT 未接線 | 文件描述完整架構，但 repo 主服務沒有實際使用 |
 | Schema 沒有統一驗證 | JSON Schema 存在，但 API 沒有統一經 validator 驗證 |
-| World validator 不一致 | 程式允許 1–6 個地標，契約要求 3–5 個 |
-| 無身份驗證 | `ME_USER_ID=1`、CORS `*`，屬於單使用者 Demo 設計 |
-| 錯誤可觀測性低 | 自動 tick 的 Exception 被吞掉 |
-| Health 資訊可能不準 | 即使 LLM 走 fallback，Health 仍可能顯示 `narrativeMode=llm` |
-| 世界列表未接生成結果 | `/api/worlds` 只回傳靜態大屏 seed，`/profile` 生成世界不會加入大地圖 |
+| 無身份驗證 | `ME_USER_ID=1`、CORS `*`，屬於單使用者 Demo 設計--> 以user id區分不同user |
 
 ---
-
-## 六、Demo Day 建議技術口徑
-
-建議使用以下說法：
-
-> 我們目前用 FastAPI、SQLModel 和 SQLite 建立事件驅動的 Agent world。世界引擎週期性選擇參與者與事件，透過 OpenRouter 上的 Nemotron 生成結構化敘事，再把同一個事件同步轉成畫面對話、文明歷史與每個 Agent 的 episodic memory。技能則有獨立的 manifest 與執行 runtime，可以由 LLM 在執行期鍛造新技能並讓其他 Agent 學習。互訪功能另外使用 GLM 生成可驗證的 WorldJSON、雙向遊記與靈魂契合結果。
-
-目前不建議宣稱：
-
-- 已有完整 autonomous multi-agent planning
-- 已有向量長期記憶
-- Agent 會基於所有過往事件自主決策
-- WebSocket、MQTT、Redis 已完整接通
-- FastAPI 主線已完成 personality evolution
-- 所有畫面上的關係、反思、人格版本都來自持久化演化
-
----
-
-## 七、建議現場展示順序
-
-1. 手動觸發 `/api/world/tick`。
-2. 看到畫面出現新的 Agent 對話泡泡。
-3. 打開 Agent detail，展示事件已寫入 Agent Memory。
-4. 讓 Agent 使用一個可執行 Skill。
-5. 用自然語言鍛造一個新 Skill。
-6. 派另一個 Agent 去廣場學習該 Skill。
-7. 展示 URL → ProfileJSON → WorldJSON。
-8. 展示雙向遊記與 Soul Resonance JSON。
-
-這樣可以形成完整且可信的技術故事：
-
-```text
-感知／輸入
-→ Agent identity
-→ LLM structured generation
-→ Persistent memory
-→ Executable skill
-→ Social transfer
-→ World-level interaction
-```
-
----
-
-## 八、驗證結果
-
-本次檢查執行結果：
-
-- Node 後端 9 個測試全部通過。
-- Python 後端模組可正常編譯。
-- SQLite schema 與現有資料量已核對。
-- FastAPI、Node 與前端 API 接線已交叉比對。

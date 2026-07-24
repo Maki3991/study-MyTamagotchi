@@ -568,6 +568,61 @@
   box-shadow: 0 5px 18px rgba(28, 25, 17, .07);
 }
 
+.themed-world-diary {
+  display: flex;
+  padding: 8px 16px 0;
+  gap: 6px;
+  align-items: center;
+}
+
+.themed-world-diary input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 11px;
+  flex: 1;
+  color: #1c1911;
+  background: rgba(255, 255, 255, .72);
+  border: 1.5px solid rgba(28, 25, 17, .14);
+  border-radius: 11px;
+  outline: none;
+  font-family: inherit;
+  font-size: var(--ui-font-body);
+}
+
+.themed-world-diary input:focus {
+  border-color: color-mix(in srgb, var(--world-accent) 55%, transparent);
+}
+
+.themed-world-diary button {
+  height: 34px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  color: #faf6ef;
+  background: var(--world-accent);
+  border: 0;
+  border-radius: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--ui-font-caption);
+}
+
+.themed-world-diary button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.themed-world-diary em {
+  color: #b5482f;
+  font-size: var(--ui-font-micro);
+  font-style: normal;
+}
+
+.fixed-world-speech.is-owner-reply {
+  z-index: 9;
+  border-color: color-mix(in srgb, var(--world-accent) 62%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--world-accent) 22%, transparent);
+}
+
 .themed-world-screen__footer {
   display: grid;
   padding: 10px 16px 8px;

@@ -20,10 +20,7 @@ def _migrate() -> None:
 
     new_cols = {
         "agent": [
-            ("world", "TEXT DEFAULT 'everyday'"),
-            ("sprite_url", "TEXT DEFAULT ''"),
             ("profile", "TEXT DEFAULT ''"),
-            ("in_world", "BOOLEAN DEFAULT 0"),
             ("image", "TEXT DEFAULT ''"),
         ],
         "agenttemplate": [
@@ -31,7 +28,8 @@ def _migrate() -> None:
         ],
     }
     dropped_cols = {
-        "agent": ["emoji"],
+        # emoji → image；world+in_world+sprite_url 合并进 location/image（见下方数据迁移）
+        "agent": ["emoji", "world", "in_world", "sprite_url"],
         "agenttemplate": ["emoji"],
     }
     with engine.connect() as conn:
@@ -43,6 +41,27 @@ def _migrate() -> None:
             for name, ddl in cols:
                 if name not in existing:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+
+        # 数据迁移：world+location → 单一 location（四个固定值）；sprite_url → image
+        agent_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(agent)"))}
+        if "world" in agent_cols:
+            conn.execute(text(
+                "UPDATE agent SET location = CASE"
+                " WHEN location = 'plaza' THEN 'plaza'"
+                " WHEN world = 'stardom' THEN 'learning-commons'"
+                " WHEN world = 'future' THEN 'maker-harbor'"
+                " ELSE 'vitality-gym-town' END"
+            ))
+        else:
+            conn.execute(text(
+                "UPDATE agent SET location = 'vitality-gym-town'"
+                " WHERE location NOT IN ('vitality-gym-town','learning-commons','maker-harbor','plaza')"
+            ))
+        if "sprite_url" in agent_cols:
+            conn.execute(text(
+                "UPDATE agent SET image = sprite_url WHERE (image IS NULL OR image = '') AND sprite_url <> ''"
+            ))
+
         for table, cols in dropped_cols.items():
             existing = {r[1] for r in conn.execute(text(f"PRAGMA table_info({table})"))}
             for name in cols:

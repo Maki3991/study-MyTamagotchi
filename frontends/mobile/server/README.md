@@ -1,5 +1,9 @@
 # ForkWorld evolution engine
 
+> ⚠️ 非主线：Demo 使用的后端是 `backend/`（FastAPI + SQLite）。
+> 这套 Node 世界引擎仅作架构参考保留，功能与数据模型更完整（reflections/relationships/personalityVersion），
+> 但未接入手机 UI，其 `/api/agents/:id/chat` 也只回固定模板、不调用 LLM。请勿与 FastAPI 版混用/混讲。
+
 This directory is a standalone ForkWorld service. MiroFish was studied as an
 architectural reference only; its repository is not modified and this service
 does not import from it.

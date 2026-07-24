@@ -257,10 +257,7 @@ async def register(job_id: str, owner_id: int = 1) -> dict:
             image=asset["finalUrl"],
             trait=persona.get("trait", "刚被拍进世界的新伙伴"),
             mood=90,
-            location="home",
-            world="everyday",
-            sprite_url=asset["finalUrl"],
-            in_world=False,
+            location="vitality-gym-town",
         )
         session.add(agent)
         session.commit()

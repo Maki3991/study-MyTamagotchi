@@ -12,6 +12,16 @@ export function resolveApiAssetUrl(url: string): string {
 
 export const ME_USER_ID = 1;
 
+/** agent 唯一的位置：一定在自己的三个世界之一或广场。 */
+export type AgentLocation = "vitality-gym-town" | "learning-commons" | "maker-harbor" | "plaza";
+
+export const AGENT_LOCATION_LABEL: Record<AgentLocation, string> = {
+  "vitality-gym-town": "活力健身世界",
+  "learning-commons": "学习教育世界",
+  "maker-harbor": "创造协作世界",
+  "plaza": "广场",
+};
+
 export type BackendSkillRow = {
   id: number;
   agent_id: number;
@@ -38,14 +48,11 @@ export type BackendAgent = {
   owner_name: string;
   name: string;
   category: string;
-  image: string; // 线条风角色图 URL（capture 管线生成）
+  image: string; // agent 外表：capture 管线生成的角色图 URL
   trait: string;
   mood: number;
-  location: "home" | "plaza";
-  world: string;
-  sprite_url: string;
-  profile: string; // JSON string of AgentEditorDraft-ish fields
-  in_world: boolean;
+  location: AgentLocation;
+  profile: string; // JSON: identity 字段 + memory_digest（随互动更新）
 };
 
 export type BackendAgentDetail = BackendAgent & {
@@ -107,9 +114,7 @@ export const backendApi = {
     patch: Partial<{
       name: string;
       trait: string;
-      world: string;
-      location: "home" | "plaza";
-      in_world: boolean;
+      location: AgentLocation;
       profile: Record<string, unknown>;
     }>,
   ) => req<BackendAgent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
@@ -124,10 +129,15 @@ export const backendApi = {
       "/plaza/converse",
       { method: "POST" },
     ),
-  worldConverse: () =>
+  worldConverse: (location?: AgentLocation) =>
     req<{ lines: DialogLine[] }>("/world/converse", {
       method: "POST",
-      body: JSON.stringify({ user_id: ME_USER_ID }),
+      body: JSON.stringify({ user_id: ME_USER_ID, location: location ?? null }),
+    }),
+  diary: (text: string, location?: AgentLocation) =>
+    req<{ agent: BackendAgent; reply: string }>("/diary", {
+      method: "POST",
+      body: JSON.stringify({ user_id: ME_USER_ID, text, location: location ?? null }),
     }),
   templates: () => req<AgentTemplateRow[]>("/templates"),
   adoptTemplate: (templateId: number, name?: string) =>

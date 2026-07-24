@@ -23,6 +23,8 @@ import {
   backendApi,
   resolveApiAssetUrl,
   ME_USER_ID,
+  AGENT_LOCATION_LABEL,
+  type AgentLocation,
   type AgentTemplateRow,
   type BackendAgent,
   type BackendAgentDetail,
@@ -1603,11 +1605,11 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-/** 前端三个固定世界 ↔ 后端 Agent.world 字段的对应关系。 */
-const THEMED_WORLD_BACKEND_KEY: Record<ThemedWorldKey, string> = {
-  fitness: "everyday",
-  learning: "stardom",
-  maker: "future",
+/** 前端三个固定世界 ↔ 后端 Agent.location 的对应关系。 */
+const THEMED_WORLD_LOCATION: Record<ThemedWorldKey, AgentLocation> = {
+  fitness: "vitality-gym-town",
+  learning: "learning-commons",
+  maker: "maker-harbor",
 };
 
 /** 把后端 DB agent 转成场景居民（sprite 优先，其次 emoji）。 */
@@ -1621,10 +1623,10 @@ function dbAgentResident(agent: BackendAgent): ThemedWorldResident {
   };
 }
 
-/** 用户在某个固定世界中的居民 = 自己的、已加入世界的 agents。 */
+/** 用户在某个固定世界中的居民 = location 在该世界的自己的 agents。 */
 function myWorldResidents(myAgents: BackendAgent[], worldKey: ThemedWorldKey): ThemedWorldResident[] {
   return myAgents
-    .filter(agent => agent.in_world && agent.world === THEMED_WORLD_BACKEND_KEY[worldKey])
+    .filter(agent => agent.location === THEMED_WORLD_LOCATION[worldKey])
     .map(dbAgentResident);
 }
 
@@ -1642,7 +1644,7 @@ function WorldDockScreen({
   onOpenChronicle: () => void;
   myAgents: BackendAgent[];
 }) {
-  const inWorldCount = myAgents.filter(agent => agent.in_world).length;
+  const plazaCount = myAgents.filter(agent => agent.location === "plaza").length;
   const worldCards: { key: ThemedWorldKey; screen: Screen; houseId: string }[] = [
     { key: "fitness", screen: "everydayTown", houseId: "H04" },
     { key: "learning", screen: "stardomDistrict", houseId: "H12" },
@@ -1660,7 +1662,7 @@ function WorldDockScreen({
             ForkWorld
           </h1>
           <p style={{ fontSize: "var(--ui-font-label)", color: "#7A7468", whiteSpace: "nowrap", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-            {myAgents.length} 位我的智能体 · {inWorldCount} 位已加入世界 · 3 个专属世界
+            {myAgents.length} 位我的智能体 · {plazaCount} 位在广场 · 3 个专属世界
           </p>
         </div>
       </div>
@@ -3868,7 +3870,7 @@ function ThemedWorldHostScreen({
     let active = true;
     setConverseDialogue([]);
     if (residents.length < 2) return;
-    backendApi.worldConverse().then(result => {
+    backendApi.worldConverse(THEMED_WORLD_LOCATION[worldKey]).then(result => {
       if (!active) return;
       const lines = result.lines
         .filter(line => residents.some(resident => resident.id === `db-${line.agent_id}`))
@@ -3881,6 +3883,16 @@ function ThemedWorldHostScreen({
   const config: ThemedWorldConfig = {
     ...THEMED_WORLDS[worldKey],
     dialogue: converseDialogue,
+  };
+
+  // 日记/心情输入：路由给这个世界里的一位 agent，记入其 memory 并生成回复泡泡
+  const sendDiary = async (text: string) => {
+    const result = await backendApi.diary(text, THEMED_WORLD_LOCATION[worldKey]);
+    return {
+      residentId: `db-${result.agent.id}`,
+      name: result.agent.name,
+      text: result.reply,
+    };
   };
   const initialStyle: BuildPaletteStyle = worldKey === "fitness"
     ? "dailySpirits"
@@ -3968,6 +3980,7 @@ function ThemedWorldHostScreen({
         onOpenBuild={() => setShowBuildPalette(true)}
         onCapture={() => navigate("capture")}
         onBack={onBack ?? (() => navigate("worldDock"))}
+        onSendDiary={sendDiary}
       />
 
       <AnimatePresence>
@@ -4379,8 +4392,8 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, dbAgents, onEd
                   className="rounded-2xl overflow-hidden text-left"
                   style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
                   <div className="flex items-center justify-center relative" style={{ height: 90, background: `${color}12` }}>
-                    {(agent.image || agent.sprite_url) ? (
-                      <motion.img src={resolveApiAssetUrl(agent.image || agent.sprite_url)} alt={agent.name} animate={{ y: [0, -3, 0] }}
+                    {agent.image ? (
+                      <motion.img src={resolveApiAssetUrl(agent.image)} alt={agent.name} animate={{ y: [0, -3, 0] }}
                         transition={{ duration: 2.4, repeat: Infinity }}
                         style={{ width: 82, height: 82, objectFit: "contain" }}/>
                     ) : (
@@ -4388,7 +4401,7 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, dbAgents, onEd
                     )}
                     <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
                       style={{ background: `${color}20`, color, border: `1px solid ${color}40`, fontSize: "var(--ui-font-caption)" }}>
-                      {agent.in_world ? "已入世界" : "待编辑"}
+                      {AGENT_LOCATION_LABEL[agent.location]}
                     </div>
                   </div>
                   <div className="p-2.5">
@@ -4398,7 +4411,7 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, dbAgents, onEd
                       {agent.trait}
                     </p>
                     <div className="flex items-center justify-between mt-1">
-                      <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{agent.world}</span>
+                      <span style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{AGENT_LOCATION_LABEL[agent.location]}</span>
                       <span style={{ fontSize: "var(--ui-font-caption)", color, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>编辑 →</span>
                     </div>
                   </div>
@@ -5141,7 +5154,7 @@ function dbAgentColor(agent: { id: number }): string {
 }
 
 function DbAgentAvatar({ agent, size = 56 }: { agent: BackendAgent; size?: number }) {
-  const src = agent.image || agent.sprite_url;
+  const src = agent.image;
   if (src) {
     return (
       <img
@@ -5242,7 +5255,7 @@ function AgentsDirectoryScreen({ sceneControl }: { sceneControl: React.ReactNode
                     )}
                   </div>
                   <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>
-                    @{agent.owner_name} · {agent.category} · {agent.location === "plaza" ? "广场" : "在家"} · {agent.world}
+                    @{agent.owner_name} · {agent.category} · {AGENT_LOCATION_LABEL[agent.location]}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -5549,14 +5562,14 @@ function PlazaScreen({
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>
-              <AgentFace image={learnResult.teacher.image || learnResult.teacher.sprite_url} name={learnResult.teacher.name}/>
+              <AgentFace image={learnResult.teacher.image} name={learnResult.teacher.name}/>
               {learnResult.teacher.name}
             </span>
             <ArrowRight size={10} color="#8E867A"/>
             <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>{learnResult.skill}</span>
             <ArrowRight size={10} color="#8E867A"/>
             <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>
-              <AgentFace image={learnResult.learner.image || learnResult.learner.sprite_url} name={learnResult.learner.name}/>
+              <AgentFace image={learnResult.learner.image} name={learnResult.learner.name}/>
               {learnResult.learner.name}
             </span>
           </div>
@@ -6287,11 +6300,11 @@ export default function App() {
     id: `db-${agent.id}`,
     name: agent.name,
     role: agent.category,
-    world: agent.world,
+    world: AGENT_LOCATION_LABEL[agent.location],
     memories: 0,
     color: dbAgentColor(agent),
-    render: (s, animated) => (agent.image || agent.sprite_url)
-      ? <PetSpriteAgent src={resolveApiAssetUrl(agent.image || agent.sprite_url)} size={80 * s} animated={animated}/>
+    render: (s, animated) => agent.image
+      ? <PetSpriteAgent src={resolveApiAssetUrl(agent.image)} size={80 * s} animated={animated}/>
       : <text x={0} y={10 * s} textAnchor="middle" fontSize={26 * s}>{agent.name.slice(0, 1)}</text>,
   });
   const activeProfile = (editingDbAgent && editingAgentId === `db-${editingDbAgent.id}`)
@@ -6397,7 +6410,6 @@ export default function App() {
       backendApi.patchAgent(editingDbAgent.id, {
         name: editorDraft.name || editingDbAgent.name,
         trait: editorDraft.personality || editingDbAgent.trait,
-        in_world: true,
         profile: { ...editorDraft },
       }).then(() => refreshMyAgents()).catch(() => {});
     }
