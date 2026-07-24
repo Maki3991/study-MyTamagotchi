@@ -4,3 +4,7 @@ sqlmodel>=0.0.19
 httpx>=0.27
 python-dotenv>=1.0
 python-multipart>=0.0.9
+# 合并后补齐：pets.py 图像流水线用 Pillow；world_engine 缓存/MQTT 用 redis / paho-mqtt
+Pillow>=10.0
+redis>=5.0
+paho-mqtt>=2.0
