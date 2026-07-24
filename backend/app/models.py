@@ -23,8 +23,38 @@ class Agent(SQLModel, table=True):
     trait: str = ""
     mood: int = 80  # 0-100
     location: str = "home"  # home | plaza
+    world: str = "everyday"  # everyday | stardom | future
+    sprite_url: str = ""  # 拍照生成的透明角色图（/api/pets/{id}/files/final）
+    profile: str = ""  # JSON: identity 编辑字段（role/personality/goal/ability/fear/privacy/animation/movement/placementMode）
+    in_world: bool = False  # inventory 中的 agent 需经过 identity 编辑后才加入世界
     created_at: datetime = Field(default_factory=now)
     last_interact_at: datetime = Field(default_factory=now)
+
+
+class WorldEventRow(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tick: int
+    day: int
+    minute: int
+    type: str = "ritual"
+    location: str = ""
+    title: str = ""
+    summary: str = ""
+    participants: str = "[]"  # JSON list[str] agent ids ("agent-3")
+    dialogue: str = "[]"  # JSON list[{agentId,text}]
+    consequence: str = ""
+    created_at: datetime = Field(default_factory=now)
+
+
+class WorldMeta(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    status: str = "running"  # running | paused
+    tick: int = 0
+    day: int = 1
+    minute: int = 8 * 60
+    started_at: datetime = Field(default_factory=now)
+    last_tick_at: Optional[datetime] = None
+    metrics: str = '{"cohesion": 52, "knowledge": 48, "creativity": 50, "stewardship": 46}'
 
 
 class Memory(SQLModel, table=True):

@@ -17,8 +17,16 @@ import {
   type StyleAgentIdentitySeed,
 } from "./CharacterSettingsScreen";
 import { useWorldEvolution } from "./useWorldEvolution";
-import type { WorldAgent } from "./worldApi";
+import { worldApi, type WorldAgent } from "./worldApi";
 import { petApi, waitForPet, type PetAsset, type PetJob } from "./petApi";
+import {
+  backendApi,
+  ME_USER_ID,
+  type BackendAgent,
+  type BackendAgentDetail,
+  type CatalogSkill,
+  type DialogLine,
+} from "./backendApi";
 import {
   WORLD_STYLE_SKILLS,
   WORLD_STYLE_SKILL_ASSETS,
@@ -1611,6 +1619,18 @@ function SectionLabel({ text }: { text: string }) {
 
 // 1. WORLD DOCK
 function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate: (s: Screen) => void; sceneControl: React.ReactNode; onOpenChronicle: () => void }) {
+  const [dockStats, setDockStats] = useState<{ agents: number; skills: number; memories: number } | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([backendApi.agents(), backendApi.allSkills(), worldApi.getWorld()])
+      .then(([agents, skills, world]) => {
+        if (!mounted) return;
+        const memories = world.agents.reduce((t, a) => t + a.memories.length, 0);
+        setDockStats({ agents: agents.length, skills: skills.length, memories });
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
   return (
     <div className="flex flex-col h-full overflow-y-auto"
       style={{ background: "#F5F0E8", fontFamily: "Press Start 2P,monospace" }}>
@@ -1622,7 +1642,7 @@ function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate
             ForkWorld
           </h1>
           <p style={{ fontSize: "var(--ui-font-label)", color: "#7A7468", whiteSpace: "nowrap", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-            {AGENT_PROFILES.length} 位智能体 · {PLAZA_SKILLS.length} 种skills · {AGENT_PROFILES.reduce((total, agent) => total + agent.memories, 0)} 段记忆 · 2 位访客
+            {dockStats ? `${dockStats.agents} 位智能体 · ${dockStats.skills} 种skills · ${dockStats.memories} 段记忆` : "连接世界中…"}
           </p>
         </div>
       </div>
@@ -1646,35 +1666,6 @@ function WorldDockScreen({ navigate, sceneControl, onOpenChronicle }: { navigate
             <ChevronRight size={15} color="#6B9E7A"/>
           </div>
         </button>
-      </div>
-
-      {/* Residents */}
-      <div className="pb-3">
-        <div className="px-5 mb-2 flex items-end justify-between">
-          <div>
-            <p style={{ fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911" }}>World Residents</p>
-            <p style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", marginTop: "3px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>小小物件，也有鲜明人格</p>
-          </div>
-          <button onClick={() => navigate("agentGallery")}
-            style={{ color: "#E8634A", fontSize: "var(--ui-font-body)", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>查看全部 →</button>
-        </div>
-        <div className="flex gap-2 px-5 overflow-x-auto">
-          {AGENT_PROFILES.map(a => (
-            <button key={a.id} onClick={() => navigate("agentGallery")}
-              className="flex-shrink-0 rounded-xl overflow-hidden text-left"
-              aria-label={`Open ${a.name} in Agent Archive`}
-              style={{ width: "76px", background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)" }}>
-              <div className="relative flex items-center justify-center" style={{ height: "58px", background: a.color + "14" }}>
-                <svg width="58" height="58" viewBox="-29 -29 58 58">{a.render(0.62, false)}</svg>
-                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: a.color }}/>
-              </div>
-              <div className="px-2 py-1.5">
-                <p className="truncate" style={{ fontSize: "var(--ui-font-body)", color: "#1C1911", fontWeight: 700 }}>{a.name}</p>
-                <p className="truncate" style={{ fontSize: "var(--ui-font-caption)", color: a.color, marginTop: "2px", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{localizedAgentRole(a)}</p>
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* World cards */}
@@ -5734,12 +5725,11 @@ function AgentArchiveTabs({ active, onChange }: {
   const tabs: { id: AgentArchiveSection; label: string }[] = [
     { id: "agents", label: "Agents" },
     { id: "objects", label: "Objects" },
-    { id: "identity", label: "Identity" },
     { id: "device", label: "Device" },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5 px-5 pb-2">
+    <div className="grid grid-cols-3 gap-1.5 px-5 pb-2">
       {tabs.map(tab => {
         const selected = active === tab.id;
         return (
@@ -5765,14 +5755,15 @@ function AgentArchiveTabs({ active, onChange }: {
   );
 }
 
-function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, capturedPets }: {
+function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEditAgent, onOpenSetting, backendAgents, onEditBackendAgent }: {
   navigate: (s: Screen) => void;
   section: "agents" | "objects";
   onSectionChange: (section: AgentArchiveSection) => void;
   drafts: Record<string, AgentEditorDraft>;
   onEditAgent: (agentId: string) => void;
   onOpenSetting: (category: CharacterStyleCategory, type?: WorldStyleSkillAssetType) => void;
-  capturedPets: PetAsset[];
+  backendAgents: BackendAgent[];
+  onEditBackendAgent: (agent: BackendAgent) => void;
 }) {
   const [agentStyle, setAgentStyle] = useState<CharacterStyleCategory>("dailySpirits");
   const activeStyle = AGENT_STYLE_OPTIONS.find(style => style.id === agentStyle) || AGENT_STYLE_OPTIONS[0];
@@ -5785,7 +5776,7 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
       <PhoneStatusBar showConnectivity={false}/>
       <div className="flex items-center justify-between px-5 py-2">
         <button onClick={() => navigate("everydayTown")} style={{ color: "#7A7468" }}><ChevronLeft size={20}/></button>
-        <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-title)", fontWeight: 700 }}>My Agents</p>
+        <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-title)", fontWeight: 700 }}>Inventory</p>
         <button style={{ color: "#7A7468" }}><Search size={18}/></button>
       </div>
 
@@ -5829,85 +5820,56 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
           </div>
           <div className="grid grid-cols-2 gap-3 pb-4">
           {agentStyle === "dailySpirits" ? <>
-            {capturedPets.filter(pet => pet.name !== "暹罗猫").map(pet => (
-              <button key={pet.id} onClick={() => navigate("everydayTown")}
-                aria-label={`查看 ${pet.name}`}
+            {backendAgents.map(agent => {
+              const accent = agentAccent(agent.id);
+              return (
+              <button key={agent.id} onClick={() => onEditBackendAgent(agent)}
+                aria-label={`编辑 ${agent.name}`}
                 className="rounded-2xl overflow-hidden text-left"
                 style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
-                <div className="flex items-center justify-center relative" style={{ height: 90, background: "#E8634A12" }}>
-                  <motion.img src={pet.finalUrl} alt={pet.name} animate={{ y: [0, -3, 0] }}
-                    transition={{ duration: 2.4, repeat: Infinity }}
-                    style={{ width: 82, height: 82, objectFit: "contain" }}/>
+                <div className="flex items-center justify-center relative" style={{ height: 90, background: accent + "12" }}>
+                  {agent.sprite_url ? (
+                    <motion.img src={agent.sprite_url} alt={agent.name} animate={{ y: [0, -3, 0] }}
+                      transition={{ duration: 2.4, repeat: Infinity }}
+                      style={{ width: 82, height: 82, objectFit: "contain" }}/>
+                  ) : (
+                    <motion.span animate={{ y: [0, -3, 0] }} transition={{ duration: 2.4, repeat: Infinity }}
+                      style={{ fontSize: 54, lineHeight: 1 }}>{agent.emoji}</motion.span>
+                  )}
                   <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
-                    style={{ background: "#E8634A20", color: "#E8634A", border: "1px solid #E8634A40", fontSize: "var(--ui-font-caption)" }}>
-                    NEW AGENT
+                    style={{
+                      background: agent.in_world ? "#6B9E7A20" : accent + "20",
+                      color: agent.in_world ? "#6B9E7A" : accent,
+                      border: `1px solid ${agent.in_world ? "#6B9E7A40" : accent + "40"}`,
+                      fontSize: "var(--ui-font-caption)",
+                    }}>
+                    {agent.in_world ? "IN WORLD" : "READY"}
                   </div>
+                  {agent.location === "plaza" && (
+                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{ background: "#4A7FA5" }}/>
+                  )}
                 </div>
                 <div className="p-2.5">
-                  <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{pet.name}</p>
-                  <p style={{ fontSize: "var(--ui-font-body)", color: "#E8634A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{pet.role}</p>
-                  {pet.personality?.length ? (
-                    <p className="truncate mt-1" style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-                      {pet.personality.join(" · ")}
-                    </p>
-                  ) : null}
-                  <div className="flex items-center justify-between mt-1">
-                    <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{pet.world}</span>
-                    <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "VT323,monospace" }}>0 段记忆</span>
+                  <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{agent.name}</p>
+                  <p style={{ fontSize: "var(--ui-font-body)", color: accent, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>{agent.category}</p>
+                  <p className="truncate mt-1" style={{ fontSize: "var(--ui-font-caption)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+                    {agent.trait}
+                  </p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span style={{ fontSize: "var(--ui-font-micro)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+                      {agent.location === "plaza" ? "⛲ 广场中" : agent.in_world ? "🏡 世界中" : "📦 待入驻"}
+                    </span>
+                    <span style={{ color: accent, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-caption)" }}>identity →</span>
                   </div>
                 </div>
               </button>
-            ))}
-            {AGENT_PROFILES.map(a => (
-            <button key={a.id} onClick={() => onEditAgent(a.id)}
-              aria-label={`Edit ${drafts[a.id]?.name || a.name} settings`}
-              className="rounded-2xl overflow-hidden text-left"
-              style={{ background: "#FAF6EF", border: "1.5px solid rgba(28,25,17,0.1)", boxShadow: "0 1px 6px rgba(28,25,17,0.05)" }}>
-              {/* Agent preview */}
-              <div className="flex items-center justify-center relative"
-                style={{ height: "90px", background: a.color + "12" }}>
-                <svg width="80" height="80" viewBox="-40 -40 80 80">
-                  {a.render(0.62, false)}
-                </svg>
-                {a.badge && (
-                  <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded-full"
-                    style={{ background: a.color + "20", color: a.color, border: `1px solid ${a.color}40`, fontSize: "var(--ui-font-caption)" }}>
-                    {a.badge}
-                  </div>
-                )}
-                {a.esp32 && (
-                  <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full flex items-center gap-0.5"
-                    style={{ background: "#1C1911", color: "white" }}>
-                    <Cpu size={8}/>
-                    <span style={{ fontSize: "var(--ui-font-caption)", fontFamily: "VT323,monospace" }}>ESP32</span>
-                  </div>
-                )}
-                {a.visiting && (
-                  <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{ background: "#E8191A" }}/>
-                )}
-              </div>
-              {/* Info */}
-              <div className="p-2.5">
-                <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700, color: "#1C1911", lineHeight: 1.1 }}>{drafts[a.id]?.name || a.name}</p>
-                <p style={{ fontSize: "var(--ui-font-body)", color: a.color, fontFamily: "VT323,monospace" }}>{drafts[a.id]?.role || a.role}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "Press Start 2P,monospace" }}>{a.world}</span>
-                  <span style={{ fontSize: "var(--ui-font-body)", color: "#7A7468", fontFamily: "VT323,monospace" }}>
-                    {a.memories} 段记忆
-                  </span>
-                </div>
-                {/* Original photo indicator */}
-                <div className="flex items-center gap-1 mt-1.5">
-                  <div className="w-4 h-4 rounded" style={{ background: a.color + "30", border: `1px solid ${a.color}40` }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16">
-                      <rect x="2" y="3" width="12" height="10" rx="1.5" fill={a.color + "40"} stroke={a.color + "60"} strokeWidth="0.7"/>
-                    </svg>
-                  </div>
-                  <span style={{ fontSize: "var(--ui-font-micro)", color: "#7A7468", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>已捕获物件</span>
-                </div>
-              </div>
-            </button>
-            ))}
+              );
+            })}
+            {backendAgents.length === 0 && (
+              <p style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)", gridColumn: "1 / -1", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+                还没有日常精灵——去 Capture 拍一张照片吧！
+              </p>
+            )}
           </> : styleAgents.map(asset => {
               const savedDraft = drafts[asset.type];
               return (
@@ -6615,6 +6577,24 @@ function PlazaStyleAgent({ type, size = 72 }: { type: WorldStyleSkillAssetType; 
     />
   );
 }
+
+const AGENT_ACCENTS = ["#E8634A", "#4A7FA5", "#6B9E7A", "#8A7A9A", "#D18A3D", "#B87872"];
+
+function agentAccent(id: number) {
+  return AGENT_ACCENTS[id % AGENT_ACCENTS.length];
+}
+
+function AgentPortrait({ agent, size = 120 }: { agent: BackendAgent; size?: number }) {
+  if (agent.sprite_url) {
+    return (
+      <img src={agent.sprite_url} alt={agent.name} draggable={false}
+        style={{ width: size, height: size, objectFit: "contain", imageRendering: "auto" }}/>
+    );
+  }
+  return <span style={{ fontSize: size * 0.62, lineHeight: 1 }}>{agent.emoji}</span>;
+}
+
+
 
 function SupervisedTrainingConsole() {
   const provider = useMemo(() => createSupervisedTrainingProvider(), []);
@@ -7625,11 +7605,54 @@ function PlazaScenePanel({ members, skills, onOpenAgent, onOpenSkill }: {
   );
 }
 
+const PLAZA_WORLD_LABEL: Record<string, string> = {
+  everyday: "Memory Town",
+  stardom: "Stardom",
+  future: "Future Colony",
+};
+
+type PlazaMember = {
+  id: string;
+  agentId: number;
+  name: string;
+  owner: string;
+  origin: string;
+  color: string;
+  isMine: boolean;
+  interests: string[];
+  art: React.ReactNode;
+};
+
+type PlazaCatalogEntry = {
+  id: string;
+  skillRowId: number;
+  name: string;
+  englishName: string;
+  category: string;
+  summary: string;
+  color: string;
+  version: string;
+  source: string;
+  capabilities: string[];
+  teacherIds: string[];
+  runnable: boolean;
+};
+
 function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
   const [plazaTab, setPlazaTab] = useState<"square" | "agents" | "skills">("square");
-  const [selectedAgentId, setSelectedAgentId] = useState("atlas");
-  const [selectedSkillId, setSelectedSkillId] = useState("route-mapping");
-  const [selectedLearnerId, setSelectedLearnerId] = useState("miko");
+  const [plazaAgents, setPlazaAgents] = useState<BackendAgent[]>([]);
+  const [catalog, setCatalog] = useState<CatalogSkill[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const [selectedLearnerId, setSelectedLearnerId] = useState("random");
+  const [learning, setLearning] = useState(false);
+  const [learnResult, setLearnResult] = useState<{
+    lines: DialogLine[];
+    learner: string;
+    teacher: string;
+    skill: string;
+  } | null>(null);
+  const [learnError, setLearnError] = useState("");
   const [forgePrompt, setForgePrompt] = useState("");
   const [forgeStatus, setForgeStatus] = useState<"idle" | "researching" | "review" | "published">("idle");
   const [forgeTrace, setForgeTrace] = useState<SkillForgeTraceEvent[]>([]);
@@ -7643,96 +7666,76 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
     evaluationPassed: number;
     evaluationTotal: number;
   } | null>(null);
-  const [customSkills, setCustomSkills] = useState<PlazaSkill[]>([]);
+  const [forgeError, setForgeError] = useState("");
+  const [customSkills, setCustomSkills] = useState<PlazaCatalogEntry[]>([]);
   const forgeRunRef = useRef(0);
-  const [skillLoadouts, setSkillLoadouts] = useState<Record<string, string[]>>(() => ({
-    ...MY_AGENT_SKILL_LOADOUTS,
+
+  const refreshPlaza = () => {
+    backendApi.plazaAgents().then(setPlazaAgents).catch(() => {});
+    backendApi.plazaSkills().then(setCatalog).catch(() => {});
+  };
+  useEffect(() => {
+    refreshPlaza();
+  }, []);
+
+  const members: PlazaMember[] = plazaAgents.map(a => ({
+    id: String(a.id),
+    agentId: a.id,
+    name: a.name,
+    owner: a.owner_id === ME_USER_ID ? "我" : a.owner_name,
+    origin: PLAZA_WORLD_LABEL[a.world] ?? a.world,
+    color: agentAccent(a.id),
+    isMine: a.owner_id === ME_USER_ID,
+    interests: [],
+    art: a.sprite_url
+      ? <img src={a.sprite_url} alt={a.name} draggable={false} style={{ width: 56, height: 58, objectFit: "contain" }}/>
+      : <span style={{ fontSize: 42, lineHeight: 1 }}>{a.emoji}</span>,
   }));
-  const members = [
-    {
-      id: "miko",
-      name: "Miko",
-      owner: "我",
-      origin: "Memory Town",
-      color: "#E8634A",
-      isMine: true,
-      interests: ["route-mapping", "shared-chronicle"],
-      art: (
-        <svg width="56" height="58" viewBox="-34 -38 68 76" aria-label="Miko">
-          <MugAgent x={0} y={7} s={1.05} accent="#E8634A" animated={false}/>
-        </svg>
-      ),
-    },
-    {
-      id: "shutter",
-      name: "Shutter",
-      owner: "我",
-      origin: "Memory Town",
-      color: "#4A7FA5",
-      isMine: true,
-      interests: ["boundary-sense", "fitness-companion"],
-      art: (
-        <svg width="56" height="58" viewBox="-34 -38 68 76" aria-label="Shutter">
-          <CameraAgent x={0} y={7} s={1.02} accent="#4A7FA5" animated={false}/>
-        </svg>
-      ),
-    },
-    {
-      id: "atlas",
-      name: "Atlas",
-      owner: "Noah",
-      origin: "Stardom",
-      color: "#579447",
-      isMine: false,
-      interests: ["shared-chronicle", "visual-archive"],
-      art: <PlazaStyleAgent type="blockCartographer" size={58}/>,
-    },
-    {
-      id: "ink",
-      name: "Ink",
-      owner: "Aya",
-      origin: "Future Colony",
-      color: "#6A6957",
-      isMine: false,
-      interests: ["visual-archive", "emotional-care"],
-      art: <PlazaStyleAgent type="lakeCat" size={56}/>,
-    },
-    {
-      id: "noct",
-      name: "Noct",
-      owner: "我",
-      origin: "Future Colony",
-      color: "#6A6957",
-      isMine: true,
-      interests: ["emotional-care", "boundary-sense"],
-      art: <PlazaStyleAgent type="lakeOwl" size={56}/>,
-    },
-    {
-      id: "ansel",
-      name: "Ansel",
-      owner: "Kai",
-      origin: "Pentiment",
-      color: "#8A543B",
-      isMine: false,
-      interests: ["route-mapping", "boundary-sense"],
-      art: <PlazaStyleAgent type="pentimentIlluminator" size={62}/>,
-    },
+
+  // 目录去重：同名技能合并，收集所有可教授的持有者
+  const dedupedSkills: PlazaCatalogEntry[] = [];
+  for (const row of catalog) {
+    const existing = dedupedSkills.find(entry => entry.name === row.name);
+    const holderId = row.holder ? String(row.holder.id) : null;
+    if (existing) {
+      if (holderId && !existing.teacherIds.includes(holderId)) existing.teacherIds.push(holderId);
+      continue;
+    }
+    dedupedSkills.push({
+      id: String(row.id),
+      skillRowId: row.id,
+      name: row.name,
+      englishName: row.def_id || row.kind,
+      category: row.category || "生活",
+      summary: row.summary,
+      color: AGENT_ACCENTS[dedupedSkills.length % AGENT_ACCENTS.length],
+      version: row.runnable ? "1.0" : "0.9",
+      source: row.holder ? `${row.holder.owner_name} · ${row.holder.name}` : "未知来源",
+      capabilities: row.capabilities.length > 0 ? row.capabilities : [row.summary].filter(Boolean),
+      teacherIds: holderId ? [holderId] : [],
+      runnable: row.runnable,
+    });
+  }
+  const allSkills: PlazaCatalogEntry[] = [
+    ...customSkills.filter(custom => !dedupedSkills.some(entry => entry.name === custom.name)),
+    ...dedupedSkills,
   ];
-  const allSkills = [...customSkills, ...PLAZA_SKILLS];
+
+  const agentSkillRows = (memberId: string) => catalog.filter(row => row.holder && String(row.holder.id) === memberId);
+
   const publicAgents = members.filter(member => !member.isMine);
   const myAgents = members.filter(member => member.isMine);
-  const selectedAgent = members.find(member => member.id === selectedAgentId) || publicAgents[0];
-  const selectedSkill = allSkills.find(skill => skill.id === selectedSkillId) || allSkills[0];
-  const selectedAgentBindings = getAgentSkillBindings(selectedAgent.id);
-  const selectedAgentMastered = selectedAgentBindings.filter(binding => binding.state === "mastered");
-  const selectedAgentLearning = selectedAgentBindings.filter(binding => binding.state === "learning");
-  const skillTeachers = PLAZA_AGENT_SKILL_BINDINGS
-    .filter(binding => binding.skillId === selectedSkill.id && binding.state === "mastered")
-    .map(binding => members.find(member => member.id === binding.agentId))
-    .filter((member): member is typeof members[number] => Boolean(member));
-  const selectedLearner = myAgents.find(member => member.id === selectedLearnerId) || myAgents[0];
-  const learnerIsInterested = selectedLearner.interests.includes(selectedSkill.id);
-  const learnerHasSkill = skillLoadouts[selectedLearner.id]?.includes(selectedSkill.id) ?? false;
+  const selectedAgent = members.find(member => member.id === selectedAgentId) || publicAgents[0] || members[0] || null;
+  const selectedSkill = allSkills.find(skill => skill.id === selectedSkillId) || allSkills[0] || null;
+  const skillTeachers = selectedSkill
+    ? selectedSkill.teacherIds
+        .map(id => members.find(member => member.id === id))
+        .filter((member): member is PlazaMember => Boolean(member))
+    : [];
+  const selectedLearner = myAgents.find(member => member.id === selectedLearnerId) || null;
+  const learnerHasSkill = Boolean(
+    selectedSkill && selectedLearner && agentSkillRows(selectedLearner.id).some(row => row.name === selectedSkill.name),
+  );
 
   useEffect(() => () => {
     forgeRunRef.current += 1;
@@ -7740,14 +7743,32 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
 
   const chooseSkill = (skillId: string) => {
     setSelectedSkillId(skillId);
+    setLearnResult(null);
+    setLearnError("");
   };
 
-  const loadSelectedSkill = () => {
-    if (learnerHasSkill) return;
-    setSkillLoadouts(current => ({
-      ...current,
-      [selectedLearner.id]: [...(current[selectedLearner.id] || []), selectedSkill.id],
-    }));
+  const learnSelectedSkill = async () => {
+    if (!selectedSkill || learning || learnerHasSkill) return;
+    setLearning(true);
+    setLearnError("");
+    setLearnResult(null);
+    try {
+      const result = await backendApi.learn(
+        selectedSkill.skillRowId,
+        selectedLearnerId === "random" ? undefined : Number(selectedLearnerId),
+      );
+      setLearnResult({
+        lines: result.lines,
+        learner: result.learner.name,
+        teacher: result.teacher.name,
+        skill: result.skill,
+      });
+      refreshPlaza();
+    } catch (error) {
+      setLearnError(error instanceof Error ? error.message : "学习失败了");
+    } finally {
+      setLearning(false);
+    }
   };
 
   const startSkillForge = async () => {
@@ -7760,22 +7781,64 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
     setForgeDraft(null);
     setForgeManifest(null);
     setForgeMetrics(null);
+    setForgeError("");
 
-    const result = await runSkillForgeHarness(prompt, events => {
-      if (forgeRunRef.current === runId) setForgeTrace(events);
-    });
-    if (forgeRunRef.current === runId) {
-      setForgeDraft(result.skill);
-      setForgeManifest(result.manifest);
-      setForgeMetrics(result.metrics);
+    // 视觉轨迹（本地演出）与真实锻造（后端 skill-forge）同时进行
+    const [harness, real] = await Promise.all([
+      runSkillForgeHarness(prompt, events => {
+        if (forgeRunRef.current === runId) setForgeTrace(events);
+      }),
+      backendApi.forge(prompt).catch(error => {
+        if (forgeRunRef.current === runId) {
+          setForgeError(error instanceof Error ? error.message : "锻造失败");
+        }
+        return null;
+      }),
+    ]);
+    if (forgeRunRef.current !== runId) return;
+    setForgeManifest(harness.manifest);
+    setForgeMetrics(harness.metrics);
+    if (real) {
+      setForgeDraft({
+        id: real.manifest.def_id,
+        name: `${real.manifest.emoji} ${real.manifest.name}`,
+        englishName: real.manifest.def_id,
+        category: real.manifest.category,
+        summary: real.manifest.description,
+        color: "#D18A3D",
+        version: "0.1",
+        source: `锻造于 ${real.agent.name}`,
+        capabilities: real.manifest.capabilities ?? [],
+      });
+      setCustomSkills(current => [
+        {
+          id: `forged-${real.skill.id}`,
+          skillRowId: real.skill.id,
+          name: real.skill.name,
+          englishName: real.manifest.def_id,
+          category: real.manifest.category,
+          summary: real.manifest.description,
+          color: "#D18A3D",
+          version: "0.1",
+          source: `我 · ${real.agent.name}`,
+          capabilities: real.manifest.capabilities ?? [],
+          teacherIds: [String(real.agent.id)],
+          runnable: true,
+        },
+        ...current.filter(entry => entry.skillRowId !== real.skill.id),
+      ]);
+      setForgeStatus("review");
+      refreshPlaza();
+    } else {
+      setForgeDraft(harness.skill);
       setForgeStatus("review");
     }
   };
 
   const publishForgedSkill = () => {
     if (!forgeDraft) return;
-    setCustomSkills(current => [forgeDraft, ...current.filter(skill => skill.id !== forgeDraft.id)]);
-    setSelectedSkillId(forgeDraft.id);
+    const published = customSkills[0];
+    if (published) setSelectedSkillId(published.id);
     setForgeStatus("published");
   };
 
@@ -7792,7 +7855,7 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#6B9E7A" }}/>
-          <span style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A" }}>6 ONLINE</span>
+          <span style={{ fontSize: "var(--ui-font-caption)", color: "#6B9E7A" }}>{members.length} ONLINE</span>
         </div>
       </div>
 
@@ -7832,14 +7895,20 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               <Radio size={10} color="#6B9E7A"/>
               <span style={{ fontSize: "var(--ui-font-micro)", letterSpacing: 1, color: "#6B9E7A" }}>LIVE LEARNING</span>
             </div>
-            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>模仿练习 · 68%</span>
+            <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)" }}>{learnResult ? "对话完成" : learning ? "教学中…" : "等待发起"}</span>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>Atlas</span>
-            <ArrowRight size={10} color="#8E867A"/>
-            <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>路线测绘</span>
-            <ArrowRight size={10} color="#8E867A"/>
-            <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>Miko</span>
+            {learnResult ? (
+              <>
+                <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#579447", fontWeight: 700 }}>{learnResult.teacher}</span>
+                <ArrowRight size={10} color="#8E867A"/>
+                <span className="rounded-full px-2 py-1" style={{ fontSize: "var(--ui-font-caption)", color: "#579447", background: "#FAF6EF" }}>{learnResult.skill}</span>
+                <ArrowRight size={10} color="#8E867A"/>
+                <span style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", color: "#E8634A", fontWeight: 700 }}>{learnResult.learner}</span>
+              </>
+            ) : (
+              <span style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)" }}>在 Skills 页选一个技能，让你的伙伴去交流学习</span>
+            )}
           </div>
         </div>
       )}
@@ -7869,18 +7938,14 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>来自 3 个世界</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                {publicAgents.map(member => {
-                  const mastered = getAgentSkillBindings(member.id).filter(binding => binding.state === "mastered");
-                  const active = selectedAgent.id === member.id;
+                {members.map(member => {
+                  const memberSkills = agentSkillRows(member.id);
+                  const active = selectedAgent?.id === member.id;
                   return (
                     <button
                       key={member.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedAgentId(member.id);
-                        const firstSkill = mastered[0]?.skillId;
-                        if (firstSkill) chooseSkill(firstSkill);
-                      }}
+                      onClick={() => setSelectedAgentId(member.id)}
                       className="rounded-2xl px-2 pt-2 pb-2 text-left"
                       style={{
                         background: active ? `${member.color}10` : "#FAF6EF",
@@ -7893,22 +7958,25 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                       <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-section)", fontWeight: 700, marginTop: 6 }}>{member.name}</p>
                       <p className="truncate" style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>@{member.owner} · {member.origin}</p>
                       <div className="mt-2">
-                        {mastered.slice(0, 1).map(binding => {
-                          const skill = getPlazaSkill(binding.skillId);
-                          if (!skill) return null;
-                          return (
-                            <span key={skill.id} className="inline-flex rounded-full px-1.5 py-1"
-                              style={{ color: skill.color, background: `${skill.color}12`, fontSize: "var(--ui-font-micro)" }}>
-                              {skill.name} · {binding.proficiency}
-                            </span>
-                          );
-                        })}
+                        {memberSkills.slice(0, 1).map(row => (
+                          <span key={row.id} className="inline-flex rounded-full px-1.5 py-1 max-w-full"
+                            style={{ color: member.color, background: `${member.color}12`, fontSize: "var(--ui-font-micro)" }}>
+                            <span className="truncate">{row.name}</span>
+                          </span>
+                        ))}
+                        {memberSkills.length === 0 && (
+                          <span style={{ color: "#B4AC9F", fontSize: "var(--ui-font-micro)" }}>还没有技能</span>
+                        )}
                       </div>
                     </button>
                   );
                 })}
+                {members.length === 0 && (
+                  <p style={{ color: "#8E867A", fontSize: "var(--ui-font-caption)", gridColumn: "1 / -1" }}>广场上还没有伙伴。</p>
+                )}
               </div>
 
+              {selectedAgent && (
               <motion.div
                 key={selectedAgent.id}
                 initial={{ opacity: 0, y: 5 }}
@@ -7919,44 +7987,41 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 <div className="flex items-center justify-between">
                   <div>
                     <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-heading)", fontWeight: 700 }}>{selectedAgent.name} 的 Skill 档案</p>
-                    <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>Skill 与角色分开保存，可替换、升级和回滚</p>
+                    <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>@{selectedAgent.owner} · 来自 {selectedAgent.origin}</p>
                   </div>
                   <Share2 size={13} color={selectedAgent.color}/>
                 </div>
                 <div className="mt-2">
                   <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>已掌握 · 可教授</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {selectedAgentMastered.map(binding => {
-                      const skill = getPlazaSkill(binding.skillId);
-                      if (!skill) return null;
+                    {agentSkillRows(selectedAgent.id).map(row => {
+                      const entry = allSkills.find(item => item.name === row.name);
+                      const entryColor = entry?.color ?? selectedAgent.color;
+                      const isChosen = selectedSkill != null && entry != null && selectedSkill.id === entry.id;
                       return (
                         <button
-                          key={skill.id}
+                          key={row.id}
                           type="button"
-                          onClick={() => chooseSkill(skill.id)}
+                          onClick={() => entry && chooseSkill(entry.id)}
                           className="rounded-full px-2 py-1.5"
                           style={{
-                            background: selectedSkill.id === skill.id ? skill.color : `${skill.color}12`,
-                            color: selectedSkill.id === skill.id ? "white" : skill.color,
-                            border: `1px solid ${skill.color}35`,
+                            background: isChosen ? entryColor : `${entryColor}12`,
+                            color: isChosen ? "white" : entryColor,
+                            border: `1px solid ${entryColor}35`,
                             fontSize: "var(--ui-font-micro)",
                           }}
                         >
-                          {skill.name} · 熟练度 {binding.proficiency}
+                          {row.name}{row.runnable ? " · ⚡可执行" : ""}
                         </button>
                       );
                     })}
+                    {agentSkillRows(selectedAgent.id).length === 0 && (
+                      <span style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)" }}>这位伙伴还没有可教授的技能。</span>
+                    )}
                   </div>
                 </div>
-                {selectedAgentLearning.length > 0 && (
-                  <div className="mt-2">
-                    <span style={{ color: "#4A7FA5", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>正在学习</span>
-                    <span style={{ color: "#7A7468", fontSize: "var(--ui-font-micro)", marginLeft: 8 }}>
-                      {getPlazaSkill(selectedAgentLearning[0].skillId)?.name} · {selectedAgentLearning[0].proficiency}%
-                    </span>
-                  </div>
-                )}
               </motion.div>
+              )}
             </div>
           ) : (
             <div>
@@ -8026,6 +8091,11 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                     {forgeStatus === "researching" ? "研究中…" : "开始研究"}
                   </button>
                 </div>
+                {forgeError && (
+                  <p style={{ color: "#E8634A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
+                    ⚠ 云端锻造失败（{forgeError}），以下为本地草稿预览
+                  </p>
+                )}
 
                 <AnimatePresence>
                   {forgeTrace.length > 0 && (
@@ -8246,10 +8316,8 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {allSkills.map(skill => {
-                  const active = skill.id === selectedSkill.id;
-                  const teacherCount = PLAZA_AGENT_SKILL_BINDINGS.filter(
-                    binding => binding.skillId === skill.id && binding.state === "mastered",
-                  ).length;
+                  const active = selectedSkill != null && skill.id === selectedSkill.id;
+                  const teacherCount = skill.teacherIds.length;
                   return (
                     <button
                       key={skill.id}
@@ -8282,7 +8350,7 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
           )}
         </div>
 
-        {plazaTab !== "square" && (
+        {plazaTab === "skills" && selectedSkill && (
           <div className="rounded-2xl p-3 shrink-0"
             style={{ background: "#FAF6EF", border: `1.5px solid ${selectedSkill.color}40`, boxShadow: "0 5px 18px rgba(28,25,17,.07)" }}>
           <div className="flex items-start justify-between gap-3">
@@ -8313,12 +8381,32 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
               </span>
             ))}
           </div>
+          <AnimatePresence>
+            {learnResult && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="rounded-xl p-2.5 mt-2 flex flex-col gap-1.5" style={{ background: "#EEF3EC", border: "1px solid rgba(107,158,122,.25)" }}>
+                  {learnResult.lines.map((line, index) => (
+                    <p key={index} style={{ color: "#4A5A4C", fontSize: "var(--ui-font-caption)", lineHeight: 1.6 }}>
+                      <span style={{ fontWeight: 700 }}>{line.emoji} {line.name}：</span>{line.text}
+                    </p>
+                  ))}
+                  <p style={{ color: "#6B9E7A", fontSize: "var(--ui-font-micro)", marginTop: 2 }}>
+                    ✓ {learnResult.learner} 学会了「{learnResult.skill}」，已写入记忆
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {learnError && (
+            <p style={{ color: "#E8634A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>⚠ {learnError}</p>
+          )}
           <div className="grid grid-cols-[112px_1fr] gap-2 mt-2">
             <div className="relative rounded-xl flex items-center px-2"
               style={{ height: 34, background: "#F0EBE2", border: "1px solid rgba(28,25,17,.08)" }}>
               <select
                 aria-label="选择学习这个 Skill 的智能体"
-                value={selectedLearner.id}
+                value={selectedLearnerId}
                 onChange={event => setSelectedLearnerId(event.target.value)}
                 style={{
                   width: "100%",
@@ -8327,18 +8415,19 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                   background: "transparent",
                   border: 0,
                   outline: 0,
-                  color: selectedLearner.color,
+                  color: selectedLearner?.color ?? "#6F685D",
                   fontSize: "var(--ui-font-caption)",
                 }}
               >
+                <option value="random">🎲 随机一位</option>
                 {myAgents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
               </select>
               <ChevronDown size={10} style={{ position: "absolute", right: 8, pointerEvents: "none", color: "#8E867A" }}/>
             </div>
             <button
               type="button"
-              onClick={loadSelectedSkill}
-              disabled={learnerHasSkill}
+              onClick={learnSelectedSkill}
+              disabled={learnerHasSkill || learning}
               className="rounded-xl flex items-center justify-center gap-1.5"
               style={{
                 height: 34,
@@ -8348,14 +8437,14 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
                 fontSize: "var(--ui-font-caption)",
               }}
             >
-              {learnerHasSkill ? <Check size={11}/> : <Plus size={11}/>}
-              {learnerHasSkill ? "已加载到智能体" : learnerIsInterested ? "感兴趣 · 请求学习" : "加载并请求学习"}
+              {learning ? <Loader2 size={11} className="animate-spin"/> : learnerHasSkill ? <Check size={11}/> : <Plus size={11}/>}
+              {learning ? "对话学习中…" : learnerHasSkill ? "已掌握这个技能" : "派伙伴去对话学习"}
             </button>
           </div>
-          <p style={{ color: learnerIsInterested ? selectedSkill.color : "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
-            {learnerIsInterested
-              ? `${selectedLearner.name} 对这个 Skill 有较高兴趣，会主动与分享者交流。`
-              : `加载只创建独立绑定，不会改变 ${selectedLearner.name} 的人格与原始记忆。`}
+          <p style={{ color: "#8E867A", fontSize: "var(--ui-font-micro)", marginTop: 6 }}>
+            {selectedLearnerId === "random"
+              ? "会随机派一位在广场上的伙伴，去找技能持有者当面请教。"
+              : `${selectedLearner?.name ?? "伙伴"} 会去找技能持有者当面请教，学会后写入自己的记忆。`}
           </p>
           </div>
         )}
@@ -8438,7 +8527,7 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
           fontSize: "var(--ui-font-caption)",
         }}
       >
-        Skills
+        Agents
       </button>
       <button
         type="button"
@@ -8465,6 +8554,21 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
 type BottomTab = "home" | "capture" | "gallery";
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
+function backendAgentProfile(agent: BackendAgent): AgentProfile {
+  return {
+    id: `backend-${agent.id}`,
+    name: agent.name,
+    role: agent.category,
+    world: PLAZA_WORLD_LABEL[agent.world] ?? agent.world,
+    memories: 0,
+    color: agentAccent(agent.id),
+    render: (s: number) =>
+      agent.sprite_url
+        ? <image href={agent.sprite_url} x={-36 * s} y={-40 * s} width={72 * s} height={72 * s}/>
+        : <text x={0} y={14 * s} textAnchor="middle" fontSize={52 * s}>{agent.emoji}</text>,
+  };
+}
+
 export default function App() {
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [capturedPets, setCapturedPets] = useState<PetAsset[]>([]);
@@ -8472,6 +8576,8 @@ export default function App() {
   const [agentDrafts, setAgentDrafts] = useState<Record<string, AgentEditorDraft>>(initialAgentDrafts);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [editorDraft, setEditorDraft] = useState<AgentEditorDraft>(() => defaultAgentDraft(AGENT_PROFILES[0]));
+  const [backendAgents, setBackendAgents] = useState<BackendAgent[]>([]);
+  const [editingBackendAgent, setEditingBackendAgent] = useState<BackendAgent | null>(null);
 
   // Home tab sub-state: worldDock + 3 worlds
   const [homeSub, setHomeSub] = useState<HomeScene>("worldDock");
@@ -8484,10 +8590,17 @@ export default function App() {
   const [characterSettingType, setCharacterSettingType] = useState<WorldStyleSkillAssetType | undefined>();
 
   const [detailScreen, setDetailScreen] = useState<Screen | null>(null);
-  const activeProfile = ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
+  const activeProfile = editingBackendAgent
+    ? backendAgentProfile(editingBackendAgent)
+    : ALL_AGENT_PROFILES.find(profile => profile.id === editingAgentId) || AGENT_PROFILES[0];
   const editingExistingAgent = editingAgentId !== null;
 
+  const refreshBackendAgents = () => {
+    backendApi.agents(ME_USER_ID).then(setBackendAgents).catch(() => {});
+  };
+
   useEffect(() => {
+    refreshBackendAgents();
     petApi.list().then(setCapturedPets).catch(() => {
       // The core world remains available if the optional media pipeline is offline.
     });
@@ -8500,6 +8613,7 @@ export default function App() {
   const registerCapturedPet = (asset: PetAsset) => {
     setLatestCapturedPet(asset);
     setCapturedPets(current => [asset, ...current.filter(item => item.id !== asset.id)]);
+    refreshBackendAgents(); // 注册即建档：后端已把它写进日常精灵
   };
 
   useEffect(() => {
@@ -8517,8 +8631,33 @@ export default function App() {
   const openAgentEditor = (agentId: string) => {
     const profile = ALL_AGENT_PROFILES.find(agent => agent.id === agentId);
     if (!profile) return;
+    setEditingBackendAgent(null);
     setEditingAgentId(agentId);
     setEditorDraft({ ...(agentDrafts[agentId] || defaultAgentDraft(profile)) });
+    setBottomTab("gallery");
+    setGallerySub("identity");
+    setDetailScreen(null);
+  };
+
+  const openBackendAgentEditor = (agent: BackendAgent) => {
+    let saved: Partial<AgentEditorDraft> = {};
+    try {
+      saved = agent.profile ? JSON.parse(agent.profile) : {};
+    } catch {
+      saved = {};
+    }
+    setEditingBackendAgent(agent);
+    setEditingAgentId(`backend-${agent.id}`);
+    setEditorDraft({
+      ...defaultAgentDraft(AGENT_PROFILES[0]),
+      name: agent.name,
+      role: agent.category,
+      personality: agent.trait,
+      goal: "",
+      ability: "",
+      fear: "",
+      ...saved,
+    });
     setBottomTab("gallery");
     setGallerySub("identity");
     setDetailScreen(null);
@@ -8549,10 +8688,12 @@ export default function App() {
     setBottomTab("gallery");
     setGallerySub(section);
     setDetailScreen(null);
+    if (section === "agents") refreshBackendAgents();
   };
 
   const cancelAgentEditor = () => {
     setEditingAgentId(null);
+    setEditingBackendAgent(null);
     setBottomTab("gallery");
     setGallerySub("agents");
     setDetailScreen(null);
@@ -8587,6 +8728,20 @@ export default function App() {
   };
 
   const finishAgentEditor = () => {
+    if (editingBackendAgent) {
+      backendApi.patchAgent(editingBackendAgent.id, {
+        name: editorDraft.name,
+        trait: editorDraft.personality,
+        in_world: true,
+        profile: { ...editorDraft },
+      }).then(refreshBackendAgents).catch(() => {});
+      setEditingBackendAgent(null);
+      setEditingAgentId(null);
+      setBottomTab("gallery");
+      setGallerySub("agents");
+      setDetailScreen(null);
+      return;
+    }
     if (editingAgentId) {
       setAgentDrafts(current => ({ ...current, [editingAgentId]: { ...editorDraft } }));
       setEditingAgentId(null);
@@ -8693,7 +8848,8 @@ export default function App() {
                   drafts={agentDrafts}
                   onEditAgent={openAgentEditor}
                   onOpenSetting={openCharacterSettings}
-                  capturedPets={capturedPets}
+                  backendAgents={backendAgents}
+                  onEditBackendAgent={openBackendAgentEditor}
                 />
               )}
               {gallerySub === "styleSetting" && (

@@ -1,0 +1,139 @@
+// FastAPI 后端客户端：agents / plaza / skills / forge / learn
+const API_BASE = (import.meta.env.VITE_WORLD_API_URL || "/api").replace(/\/$/, "");
+
+export const ME_USER_ID = 1;
+
+export type BackendSkillRow = {
+  id: number;
+  agent_id: number;
+  name: string;
+  description: string;
+  code: string;
+  source: string;
+  kind: string;
+  def_id: string;
+  manifest: string;
+};
+
+export type BackendMemory = {
+  id: number;
+  agent_id: number;
+  kind: string;
+  content: string;
+  created_at: string;
+};
+
+export type BackendAgent = {
+  id: number;
+  owner_id: number;
+  owner_name: string;
+  name: string;
+  category: string;
+  emoji: string;
+  trait: string;
+  mood: number;
+  location: "home" | "plaza";
+  world: string;
+  sprite_url: string;
+  profile: string; // JSON string of AgentEditorDraft-ish fields
+  in_world: boolean;
+};
+
+export type BackendAgentDetail = BackendAgent & {
+  memories: BackendMemory[];
+  skills: BackendSkillRow[];
+};
+
+export type CatalogSkill = {
+  id: number;
+  def_id: string;
+  name: string;
+  emoji: string;
+  category: string;
+  summary: string;
+  capabilities: string[];
+  kind: string;
+  source: string;
+  runnable: boolean;
+  manifest: string;
+  holder: {
+    id: number;
+    name: string;
+    emoji: string;
+    owner_name: string;
+    location: string;
+  } | null;
+};
+
+export type DialogLine = { agent_id: number; name: string; emoji: string; text: string };
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body as any)?.detail ?? `请求失败 (${res.status})`);
+  }
+  return res.json();
+}
+
+export const backendApi = {
+  agents: (ownerId?: number) =>
+    req<BackendAgent[]>(`/agents${ownerId != null ? `?owner_id=${ownerId}` : ""}`),
+  agent: (id: number) => req<BackendAgentDetail>(`/agents/${id}`),
+  patchAgent: (
+    id: number,
+    patch: Partial<{
+      name: string;
+      trait: string;
+      world: string;
+      location: "home" | "plaza";
+      in_world: boolean;
+      profile: Record<string, unknown>;
+    }>,
+  ) => req<BackendAgent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  chat: (agentId: number, text: string) =>
+    req<{ reply: string; mood: number }>(`/agents/${agentId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  plazaAgents: () => req<BackendAgent[]>("/plaza"),
+  plazaSkills: () => req<CatalogSkill[]>("/skills?location=plaza"),
+  allSkills: () => req<CatalogSkill[]>("/skills"),
+  learn: (skillId: number, learnerId?: number) =>
+    req<{
+      lines: DialogLine[];
+      learner: BackendAgent;
+      teacher: BackendAgent;
+      skill: string;
+      already_known: boolean;
+    }>("/plaza/learn", {
+      method: "POST",
+      body: JSON.stringify({ skill_id: skillId, learner_id: learnerId ?? null }),
+    }),
+  forge: (prompt: string, agentId?: number) =>
+    req<{
+      output: string;
+      skill: CatalogSkill;
+      manifest: Record<string, unknown> & {
+        name: string;
+        emoji: string;
+        def_id: string;
+        category: string;
+        description: string;
+        capabilities: string[];
+        inputs: { key: string; label: string; type: string; options?: string[] }[];
+      };
+      agent: BackendAgent;
+    }>("/skills/forge", {
+      method: "POST",
+      body: JSON.stringify({ prompt, agent_id: agentId ?? null }),
+    }),
+  invokeSkill: (agentId: number, skillId: number, inputs: Record<string, string>) =>
+    req<{ output: string; mood: number }>(`/agents/${agentId}/skills/${skillId}/invoke`, {
+      method: "POST",
+      body: JSON.stringify({ inputs }),
+    }),
+};
