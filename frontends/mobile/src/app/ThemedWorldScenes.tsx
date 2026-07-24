@@ -194,24 +194,46 @@ const SCENE_SCATTER = [
   { kind: "flower", x: 93, y: 82, scale: 0.8, rotate: -7 },
 ] as const;
 
-function createRandomResidentMotions(residents: ThemedWorldResident[]): ResidentMotion[] {
+function createRandomResidentMotions(
+  residents: ThemedWorldResident[],
+  compact = false,
+): ResidentMotion[] {
   const count = residents.length;
-  const points: { x: number; y: number }[] = [];
-  const minimumDistance = count > 6 ? 0.105 : 0.135;
+  const featuredPoint = { x: 0.5, y: compact ? 0.76 : 0.66 };
+  const points: { x: number; y: number }[] = residents.some(resident => resident.featured)
+    ? [featuredPoint]
+    : [];
+  const minimumDistance = count > 6 ? 0.12 : 0.14;
   const now = performance.now();
   let visitorIndex = 0;
 
   return Array.from({ length: count }, (_, index) => {
     const visitor = residents[index]?.visitor;
+    const featured = residents[index]?.featured;
+    if (featured) {
+      return {
+        ...featuredPoint,
+        vx: 0,
+        vy: 0,
+        turnAt: Number.POSITIVE_INFINITY,
+      };
+    }
+
     let point = visitor
       ? VISITOR_STARTS[visitorIndex++ % VISITOR_STARTS.length]
       : SAFE_START_FALLBACKS[index % SAFE_START_FALLBACKS.length];
 
-    for (let attempt = 0; !visitor && attempt < 80; attempt += 1) {
-      const candidate = {
-        x: 0.09 + Math.random() * 0.82,
-        y: 0.12 + Math.random() * 0.76,
-      };
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const visitorStart = VISITOR_STARTS[(visitorIndex - 1 + VISITOR_STARTS.length) % VISITOR_STARTS.length];
+      const candidate = visitor
+        ? {
+            x: Math.max(0.09, Math.min(0.91, visitorStart.x + (Math.random() - 0.5) * 0.08)),
+            y: Math.max(0.12, Math.min(0.88, visitorStart.y + (Math.random() - 0.5) * 0.08)),
+          }
+        : {
+            x: 0.09 + Math.random() * 0.82,
+            y: 0.12 + Math.random() * 0.76,
+          };
       const overlapsLandmark = candidate.x > 0.2
         && candidate.x < 0.8
         && candidate.y > 0.2
@@ -230,7 +252,7 @@ function createRandomResidentMotions(residents: ThemedWorldResident[]): Resident
     points.push(point);
     const direction = Math.random() * Math.PI * 2;
     const speed = visitor
-      ? 0.017 + Math.random() * 0.005
+      ? 0.008 + Math.random() * 0.004
       : 0.031 + Math.random() * 0.013;
     return {
       x: point.x,
@@ -295,30 +317,68 @@ function WorldCanvas({
   const canvasRef = useRef<HTMLDivElement>(null);
   const initialMotionRef = useRef<ResidentMotion[] | null>(null);
   if (!initialMotionRef.current) {
-    initialMotionRef.current = createRandomResidentMotions(residents);
+    initialMotionRef.current = createRandomResidentMotions(residents, compact);
   }
   const motionRef = useRef<ResidentMotion[]>(initialMotionRef.current);
   const decorationDragRef = useRef<number | null>(null);
   const [lineIndex, setLineIndex] = useState(0);
+  const [speechVisible, setSpeechVisible] = useState(true);
   const [positions, setPositions] = useState(
     initialMotionRef.current.map(({ x, y }) => ({ x, y })),
   );
   const residentKey = residents.map(resident => resident.id).join("|");
+  const visitorIds = residents.filter(resident => resident.visitor).map(resident => resident.id);
+  const visitorKey = visitorIds.join("|");
+  const [visibleVisitorId, setVisibleVisitorId] = useState<string | null>(
+    visitorIds[0] ?? null,
+  );
 
   useEffect(() => {
+    setLineIndex(0);
+    setSpeechVisible(true);
     if (compact) return;
-    const timer = window.setInterval(
-      () => setLineIndex((current) => (current + 1) % config.dialogue.length),
-      4200,
-    );
-    return () => window.clearInterval(timer);
-  }, [compact, config.dialogue.length]);
+
+    let swapTimer = 0;
+    const lineTimer = window.setInterval(() => {
+      setSpeechVisible(false);
+      swapTimer = window.setTimeout(() => {
+        setLineIndex((current) => (current + 1) % config.dialogue.length);
+        setSpeechVisible(true);
+      }, 260);
+    }, 4200);
+
+    return () => {
+      window.clearInterval(lineTimer);
+      window.clearTimeout(swapTimer);
+    };
+  }, [compact, config.id, config.dialogue.length]);
 
   useEffect(() => {
-    const initial = createRandomResidentMotions(residents);
+    if (compact || visitorIds.length === 0) {
+      setVisibleVisitorId(null);
+      return;
+    }
+
+    let visitorIndex = Math.floor(Math.random() * visitorIds.length);
+    let visitorTimer = 0;
+    const showVisitor = () => {
+      setVisibleVisitorId(visitorIds[visitorIndex]);
+      visitorTimer = window.setTimeout(() => {
+        setVisibleVisitorId(null);
+        visitorIndex = (visitorIndex + 1) % visitorIds.length;
+        visitorTimer = window.setTimeout(showVisitor, 1600 + Math.random() * 2200);
+      }, 4800 + Math.random() * 2600);
+    };
+
+    showVisitor();
+    return () => window.clearTimeout(visitorTimer);
+  }, [compact, config.id, visitorKey]);
+
+  useEffect(() => {
+    const initial = createRandomResidentMotions(residents, compact);
     motionRef.current = initial;
     setPositions(initial.map(({ x, y }) => ({ x, y })));
-  }, [config.id, residentKey, residents.length]);
+  }, [compact, config.id, residentKey, residents.length]);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -362,7 +422,7 @@ function WorldCanvas({
         if (resident?.featured) return;
 
         if (time >= motion.turnAt) {
-          const speed = Math.max(0.03, Math.hypot(motion.vx, motion.vy));
+          const speed = Math.max(resident?.visitor ? 0.008 : 0.03, Math.hypot(motion.vx, motion.vy));
           const turn = (Math.random() - 0.5) * 1.15;
           const angle = Math.atan2(motion.vy, motion.vx) + turn;
           motion.vx = Math.cos(angle) * speed;
@@ -373,16 +433,16 @@ function WorldCanvas({
         let nextX = motion.x + motion.vx * elapsed;
         let nextY = motion.y + motion.vy * elapsed;
         const minX = resident?.visitor && motion.homeX !== undefined
-          ? Math.max(radiusX, motion.homeX - 0.075)
+          ? Math.max(radiusX, motion.homeX - 0.035)
           : radiusX;
         const maxX = resident?.visitor && motion.homeX !== undefined
-          ? Math.min(1 - radiusX, motion.homeX + 0.075)
+          ? Math.min(1 - radiusX, motion.homeX + 0.035)
           : 1 - radiusX;
         const minY = resident?.visitor && motion.homeY !== undefined
-          ? Math.max(radiusY, motion.homeY - 0.065)
+          ? Math.max(radiusY, motion.homeY - 0.03)
           : radiusY;
         const maxY = resident?.visitor && motion.homeY !== undefined
-          ? Math.min(1 - radiusY, motion.homeY + 0.065)
+          ? Math.min(1 - radiusY, motion.homeY + 0.03)
           : 1 - radiusY;
 
         if (nextX <= minX || nextX >= maxX) {
@@ -427,6 +487,35 @@ function WorldCanvas({
             }
           }
         });
+
+        const minimumResidentGap = compact ? 44 : 78;
+        const collisionIndex = motionRef.current.findIndex((otherMotion, otherIndex) => {
+          if (otherIndex === index) return false;
+          const otherResident = residents[otherIndex];
+          const otherX = otherResident?.featured ? 0.5 : otherMotion.x;
+          const otherY = otherResident?.featured ? (compact ? 0.76 : 0.66) : otherMotion.y;
+          return Math.hypot(
+            (nextX - otherX) * canvasBounds.width,
+            (nextY - otherY) * canvasBounds.height,
+          ) < minimumResidentGap;
+        });
+
+        if (collisionIndex >= 0) {
+          const otherMotion = motionRef.current[collisionIndex];
+          const otherResident = residents[collisionIndex];
+          const otherX = otherResident?.featured ? 0.5 : otherMotion.x;
+          const otherY = otherResident?.featured ? (compact ? 0.76 : 0.66) : otherMotion.y;
+          const fallbackAngle = ((index + 1) / Math.max(residents.length, 1)) * Math.PI * 2;
+          const awayAngle = Math.abs(motion.x - otherX) + Math.abs(motion.y - otherY) > 0.001
+            ? Math.atan2(motion.y - otherY, motion.x - otherX)
+            : fallbackAngle;
+          const speed = Math.max(resident?.visitor ? 0.008 : 0.03, Math.hypot(motion.vx, motion.vy));
+          motion.vx = Math.cos(awayAngle) * speed;
+          motion.vy = Math.sin(awayAngle) * speed;
+          motion.turnAt = time + 900 + Math.random() * 900;
+          nextX = motion.x;
+          nextY = motion.y;
+        }
 
         motion.x = nextX;
         motion.y = nextY;
@@ -559,6 +648,7 @@ function WorldCanvas({
       ))}
 
       {residents.map((resident, index) => {
+        if (resident.visitor && !compact && resident.id !== visibleVisitorId) return null;
         const position = residentPosition(index);
         const isSpeaking = !compact && resident.id === activeLine.speakerId;
         return (
@@ -587,17 +677,19 @@ function WorldCanvas({
 
       {!compact && (
         <>
-          <div
-            className={`fixed-world-speech ${activePosition.x > 0.68 ? "is-right" : activePosition.x >= 0.32 ? "is-center" : ""} ${activePosition.y < 0.38 ? "is-below" : ""}`}
-            key={`${config.id}-${lineIndex}`}
-            style={{
-              "--speech-x": `${activePosition.x * 100}%`,
-              "--speech-y": `${activePosition.y * 100}%`,
-            } as CSSProperties}
-          >
-            <span>{residents[activeResidentIndex]?.name} · {activeLine.topic}</span>
-            <p>{activeLine.text}</p>
-          </div>
+          {speechVisible && (
+            <div
+              className={`fixed-world-speech ${activePosition.x > 0.68 ? "is-right" : activePosition.x >= 0.32 ? "is-center" : ""} ${activePosition.y < 0.38 ? "is-below" : ""}`}
+              key={`${config.id}-${lineIndex}`}
+              style={{
+                "--speech-x": `${activePosition.x * 100}%`,
+                "--speech-y": `${activePosition.y * 100}%`,
+              } as CSSProperties}
+            >
+              <span>{residents[activeResidentIndex]?.name} · {activeLine.topic}</span>
+              <p>{activeLine.text}</p>
+            </div>
+          )}
           <div className="fixed-world-topic">
             <span><Radio size={9} /> WORLD TOPIC</span>
             <p>{config.topics.join(" · ")}</p>
