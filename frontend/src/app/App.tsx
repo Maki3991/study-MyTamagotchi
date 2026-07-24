@@ -6969,7 +6969,7 @@ function PlazaScenePanel({ members, onOpenAgent }: {
       <iframe
         ref={iframeRef}
         title="ForkWorld 完整世界地图"
-        src="/forkworld-map/global.html?bg=1&embed=1&external_agents=1&shell=2"
+        src="/forkworld-map/global.html?bg=1&embed=1&external_agents=1&shell=4"
         onLoad={() => setMapReady(true)}
         style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:0, background:"#F5F0E8" }}
       />

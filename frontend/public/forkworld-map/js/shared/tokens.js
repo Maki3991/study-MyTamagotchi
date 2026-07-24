@@ -15,10 +15,11 @@ FW.T = {
   road: "#C8C2B4",
   grass: "#B8D4A0",
   water: "#9BBFCF",
-  // 手写感字体栈（离线可用：中文走楷体，拉丁走 Caveat 若已装）
-  fontHand: '"Caveat","Kaiti SC","STKaiti","KaiTi",cursive',
-  fontMono: '"VT323","Press Start 2P","Menlo","PingFang SC",monospace',
-  fontBody: '-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif',
+  // 与 ForkWorld 主 UI 共用的中文像素字体。
+  fontPixel: '"Fusion Pixel 10px Monospaced SC","PingFang SC","Microsoft YaHei",sans-serif',
+  fontHand: '"Fusion Pixel 10px Monospaced SC","PingFang SC","Microsoft YaHei",sans-serif',
+  fontMono: '"Fusion Pixel 10px Monospaced SC","Menlo","PingFang SC",monospace',
+  fontBody: '"Fusion Pixel 10px Monospaced SC","PingFang SC","Microsoft YaHei",sans-serif',
 };
 
 /* 世界点缀色轮换（ForkWorld everyday/stardom/future DNA 抽取） */

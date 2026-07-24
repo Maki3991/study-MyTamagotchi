@@ -15,8 +15,16 @@
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const URL_FLAGS = new URLSearchParams(location.search);
   const EXTERNAL_AGENTS = URL_FLAGS.has("external_agents");
+  const EMBED_MODE = URL_FLAGS.has("embed");
 
   const REG = await FW.loadData(".");
+  if (document.fonts?.load) {
+    try {
+      await document.fonts.load('10px "Fusion Pixel 10px Monospaced SC"');
+    } catch (_) {
+      // Font fallback remains usable if the browser cannot preload it.
+    }
+  }
 
   // 世界点缀色轮换（星空暗色系，与手机端同源）
   REG.worlds.forEach((w, i) => (w._color = FW.WORLD_ACCENTS[i % FW.WORLD_ACCENTS.length]));
@@ -213,21 +221,36 @@
   }
 
   // ── 挂牌 / 地标 / 气泡（纸面手绘风，Phaser 容器实现） ──────────
+  function embeddedTextScale() {
+    if (!EMBED_MODE) return 1;
+    return Phaser.Math.Clamp(
+      Math.min(window.innerWidth / 390, window.innerHeight / 620),
+      0.82,
+      1
+    );
+  }
+
   function makePlate(sc, w, x, y) {
+    const titleSize = EMBED_MODE ? "12px" : "26px";
+    const subSize = EMBED_MODE ? "8px" : "15px";
+    const subY = EMBED_MODE ? 16 : 30;
     const title = sc.add.text(0, 0, w.world.world_name, {
-      fontFamily: T.fontHand, fontSize: "26px", color: T.ink, fontStyle: "bold", resolution: DPR,
+      fontFamily: T.fontPixel, fontSize: titleSize, color: T.ink, resolution: DPR,
     }).setOrigin(0.5, 0);
-    const sub = sc.add.text(0, 30, `${w.owner} · ${w.world.temperament}`, {
-      fontFamily: T.fontHand, fontSize: "15px", color: "#6b6558", resolution: DPR,
+    const sub = sc.add.text(0, subY, `${w.owner} · ${w.world.temperament}`, {
+      fontFamily: T.fontPixel, fontSize: subSize, color: "#7A7468", resolution: DPR,
     }).setOrigin(0.5, 0);
-    const bw = Math.max(title.width, sub.width) + 36, bh = 56;
+    const bw = Math.max(title.width, sub.width) + (EMBED_MODE ? 20 : 36);
+    const bh = EMBED_MODE ? 32 : 56;
+    const radius = EMBED_MODE ? 8 : 12;
+    const lineWidth = EMBED_MODE ? 1 : 2;
     const g = sc.add.graphics();
-    g.fillStyle(0xfaf6ef, 0.96).fillRoundedRect(-bw / 2, -8, bw, bh, 12);
-    g.lineStyle(2, Phaser.Display.Color.HexStringToColor(w._color).color, 0.9)
-      .strokeRoundedRect(-bw / 2, -8, bw, bh, 12);
-    const c = sc.add.container(x, y - 40, [g, title, sub]).setDepth(10000);
+    g.fillStyle(0xfaf6ef, 0.94).fillRoundedRect(-bw / 2, -6, bw, bh, radius);
+    g.lineStyle(lineWidth, Phaser.Display.Color.HexStringToColor(w._color).color, 0.72)
+      .strokeRoundedRect(-bw / 2, -6, bw, bh, radius);
+    const c = sc.add.container(x, y - (EMBED_MODE ? 24 : 40), [g, title, sub]).setDepth(10000);
     c.setSize(bw, bh);
-    c.setInteractive(new Phaser.Geom.Rectangle(-bw / 2, -8, bw, bh), Phaser.Geom.Rectangle.Contains);
+    c.setInteractive(new Phaser.Geom.Rectangle(-bw / 2, -6, bw, bh), Phaser.Geom.Rectangle.Contains);
     c.on("pointerup", p => { if (!p._wasDrag) openDetail(w); });
     return c;
   }
@@ -235,8 +258,10 @@
   function makeLandmark(sc, w, lm, x, y) {
     // 建筑贴图本身已是图标，这里只保留名牌（手绘纸签）
     const label = sc.add.text(0, 0, lm.name, {
-      fontFamily: T.fontHand, fontSize: "14px", color: T.ink,
-      backgroundColor: "rgba(250,246,239,0.92)", padding: { x: 7, y: 3 }, resolution: DPR,
+      fontFamily: T.fontPixel, fontSize: EMBED_MODE ? "8px" : "14px", color: T.ink,
+      backgroundColor: "rgba(250,246,239,0.92)",
+      padding: EMBED_MODE ? { x: 4, y: 2 } : { x: 7, y: 3 },
+      resolution: DPR,
     }).setOrigin(0.5, 1);
     const c = sc.add.container(x, y, [label]).setDepth(9500);
     c._label = label;
@@ -246,16 +271,25 @@
   function showBubble(env, text, ms) {
     if (env.bubble) { env.bubble.destroy(); env.bubble = null; }
     const sc = scene;
+    const fontSize = EMBED_MODE ? "9px" : "16px";
+    const wrapWidth = EMBED_MODE
+      ? Phaser.Math.Clamp(window.innerWidth * 0.3, 96, 128)
+      : 240;
     const txt = sc.add.text(0, 0, text, {
-      fontFamily: T.fontHand, fontSize: "16px", color: T.ink,
-      wordWrap: { width: 240 }, align: "left", resolution: DPR,
+      fontFamily: T.fontPixel, fontSize, color: T.ink,
+      wordWrap: { width: wrapWidth, useAdvancedWrap: EMBED_MODE }, align: "left",
+      lineSpacing: EMBED_MODE ? 2 : 0, resolution: DPR,
     }).setOrigin(0.5, 1);
-    const bw = txt.width + 24, bh = txt.height + 16;
+    const padX = EMBED_MODE ? 9 : 12;
+    const padY = EMBED_MODE ? 6 : 8;
+    const bw = txt.width + padX * 2, bh = txt.height + padY * 2;
+    const radius = EMBED_MODE ? 8 : 10;
+    const lineWidth = EMBED_MODE ? 1 : 2;
     const g = sc.add.graphics();
-    g.fillStyle(0xffffff, 0.97).fillRoundedRect(-bw / 2, -bh - 8, bw, bh, 10);
-    g.lineStyle(2, 0x1c1911, 0.85).strokeRoundedRect(-bw / 2, -bh - 8, bw, bh, 10);
-    g.fillTriangle(-5, -9, 5, -9, 0, 0).lineStyle(2, 0x1c1911, 0.85);
-    txt.y = -16;
+    g.fillStyle(0xfaf6ef, 0.96).fillRoundedRect(-bw / 2, -bh - 7, bw, bh, radius);
+    g.lineStyle(lineWidth, 0x7a7468, 0.72).strokeRoundedRect(-bw / 2, -bh - 7, bw, bh, radius);
+    g.fillStyle(0xfaf6ef, 0.96).fillTriangle(-4, -8, 4, -8, 0, 0);
+    txt.y = -(padY + 7);
     const c = sc.add.container(env.sprite.x, env.sprite.y - 26, [g, txt]).setDepth(12000);
     env.bubble = c;
     sc.time.delayedCall(ms, () => { if (env.bubble === c) { c.destroy(); env.bubble = null; } });
@@ -264,8 +298,11 @@
   function addBeam(A, B, v) {
     if (beams.some(b => b.v.visit_id === v.visit_id)) return;
     const label = scene.add.text(0, 0, `❤ ${v.resonance.score}`, {
-      fontFamily: T.fontMono, fontSize: "18px", color: v.resonance.hardware_feedback.led_rgb,
-      backgroundColor: "rgba(28,25,17,0.75)", padding: { x: 8, y: 3 }, resolution: DPR,
+      fontFamily: T.fontPixel, fontSize: EMBED_MODE ? "9px" : "18px",
+      color: v.resonance.hardware_feedback.led_rgb,
+      backgroundColor: "rgba(28,25,17,0.75)",
+      padding: EMBED_MODE ? { x: 5, y: 2 } : { x: 8, y: 3 },
+      resolution: DPR,
     }).setOrigin(0.5).setDepth(11000);
     const ax = px(A.region.anchor[0]), ay = px(A.region.anchor[1]);
     const bx = px(B.region.anchor[0]), by = px(B.region.anchor[1]);
@@ -439,18 +476,31 @@
     postPlazaState();
 
     // 屏幕恒定大小元素：反向缩放（坐标系为设备像素，故用 DPR/zoom 保持 CSS 尺寸）
-    const inv = Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.6 * DPR);
+    const inv = EMBED_MODE
+      ? Phaser.Math.Clamp(DPR / cam.zoom, 0.45, 2.6 * DPR)
+      : Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.6 * DPR);
+    const textScale = embeddedTextScale();
     for (const w of REG.worlds) {
-      w._plate.setScale(inv * 0.92);
+      w._plate.setScale(inv * (EMBED_MODE ? textScale : 0.92));
       const showLabels = cam.zoom >= 0.5 * DPR;
       for (const m of w._marks) {
-        m.setScale(Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2 * DPR));
+        const markInv = EMBED_MODE
+          ? Phaser.Math.Clamp(DPR / cam.zoom, 0.45, 2 * DPR)
+          : Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2 * DPR);
+        m.setScale(markInv * textScale);
         m._label.setVisible(showLabels);
       }
     }
     for (const id in envoys) {
       const env = envoys[id];
-      if (env.bubble) env.bubble.setScale(Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.2 * DPR));
+      if (env.bubble) {
+        const bubbleInv = EMBED_MODE
+          ? Phaser.Math.Clamp(DPR / cam.zoom, 0.45, 2.2 * DPR)
+          : Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.2 * DPR);
+        env.bubble.setScale(
+          bubbleInv * textScale
+        );
+      }
     }
 
     // 灵魂连线脉动
@@ -461,7 +511,10 @@
       const lw = Phaser.Math.Clamp(DPR * (2.5 + b.v.resonance.score / 30) / cam.zoom, 3 * DPR, 14 * DPR);
       beamsGfx.lineStyle(lw, b.color, pulse);
       beamsGfx.lineBetween(b.a[0], b.a[1], b.b[0], b.b[1]);
-      b.label.setScale(Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.4 * DPR));
+      const beamInv = EMBED_MODE
+        ? Phaser.Math.Clamp(DPR / cam.zoom, 0.45, 2.4 * DPR)
+        : Phaser.Math.Clamp(DPR / cam.zoom, DPR, 2.4 * DPR);
+      b.label.setScale(beamInv * textScale);
     });
   }
 

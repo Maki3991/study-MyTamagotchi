@@ -13,14 +13,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Ma+Shan+Zheng&family=VT323&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/fonts/fusion-pixel-10px-monospaced-sc.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face {
+    font-family: "Fusion Pixel 10px Monospaced SC";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("assets/fonts/fusion-pixel-10px-monospaced-sc.woff2") format("woff2");
+  }
   :root {
     --paper: #F5F0E8; --card: #FAF6EF; --ink: #1C1911;
     --ink-soft: #6b6558; --ink-faint: rgba(28,25,17,.14);
     --a1: #E8634A; --a2: #6B9E7A; --a3: #4A7FA5;
-    --title: "Caveat","Ma Shan Zheng","Kaiti SC","STKaiti",cursive;
-    --hand: "Caveat","Kaiti SC","STKaiti","KaiTi",cursive;
-    --mono: "VT323","Menlo","PingFang SC",monospace;
+    --title: "Fusion Pixel 10px Monospaced SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --hand: "Fusion Pixel 10px Monospaced SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono: "Fusion Pixel 10px Monospaced SC","Menlo","PingFang SC",monospace;
     /* 手绘抖动边框（四角 border-radius 各异 = 徒手画的方框） */
     --wobble: 235px 16px 225px 18px / 18px 220px 20px 235px;
     --wobble2: 18px 230px 16px 240px / 220px 16px 235px 18px;
@@ -187,9 +195,9 @@
   <div id="hint" class="paper">拖拽平移 · 滚轮缩放 · 点世界看详情 · 10 秒无操作自动巡航</div>
 
   <script src="js/vendor/phaser.min.js"></script>
-  <script src="js/shared/tokens.js?v=6"></script>
+  <script src="js/shared/tokens.js?v=7"></script>
   <script src="js/shared/data.js?v=6"></script>
   <script src="js/global/paper_map.js?v=6"></script>
-  <script src="js/global/app.js?v=7"></script>
+  <script src="js/global/app.js?v=9"></script>
 </body>
 </html>
