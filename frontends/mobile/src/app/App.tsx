@@ -7267,7 +7267,7 @@ function SupervisedTrainingConsole() {
     setFeedback(null);
     try {
       const available = engineStatus === "ready" || await checkEngine();
-      if (!available) throw new Error("练了吗模型服务未启动，请先启动本地训练引擎");
+      if (!available) throw new Error("监督训练服务暂时不可用，请稍后重试");
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("当前环境无法访问摄像头");
       let cameraAbandoned = false;
       let permissionTimer = 0;
@@ -7332,7 +7332,7 @@ function SupervisedTrainingConsole() {
       <div className="px-3 py-2.5 flex items-center justify-between gap-3" style={{ background: "#B67C4212", borderBottom: "1px solid #B67C4228" }}>
         <div>
           <p style={{ color: "#B67C42", fontSize: "var(--ui-font-micro)", letterSpacing: 1 }}>DOTTI RUNTIME · REAL SKILL</p>
-          <p style={{ fontSize: "var(--ui-font-body)", marginTop: 4 }}>{sessionId ? "监督训练进行中" : "本地监督训练控制台"}</p>
+          <p style={{ fontSize: "var(--ui-font-body)", marginTop: 4 }}>{sessionId ? "监督训练进行中" : "实时监督训练控制台"}</p>
         </div>
         <span className="flex items-center gap-1 rounded-full px-2 py-1" style={{ color: statusColor, background: `${statusColor}12`, fontSize: "var(--ui-font-micro)" }}>
           <span className={sessionId ? "w-1.5 h-1.5 rounded-full animate-pulse" : "w-1.5 h-1.5 rounded-full"} style={{ background: statusColor }}/>
@@ -7439,7 +7439,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
       memories: 36,
       traits: ["专注", "耐心", "安全优先"],
       belief: "先看清动作，再在真正需要时提醒；训练不是催促，而是持续守护。",
-      evolution: "正在把本地姿态识别、动作计数与纠错节奏整理成可以独立加载的监督训练方法。",
+      evolution: "正在把实时姿态识别、动作计数与纠错节奏整理成可以独立加载的监督训练方法。",
       art: <img src={petDachshundPng} alt="腊肠犬 Dotti" draggable={false} style={{ width: 132, height: 132, objectFit: "contain" }}/>,
     },
     {
@@ -7797,7 +7797,7 @@ function AgentGrowthScreen({ sceneControl }: { sceneControl: React.ReactNode }) 
                     {openManualSkill.id === "supervised-training" && !openManualLoaded && (
                       <section className="rounded-2xl p-3 text-center" style={{ background: "#F0EBE2", border: `1px dashed ${openManualSkill.color}65` }}>
                         <p style={{ color: "#625D54", fontSize: "var(--ui-font-caption)", lineHeight: 1.6 }}>
-                          监督训练已从 Dotti 卸载。重新加载后才会连接摄像头与“练了吗”本地模型服务。
+                          监督训练已从 Dotti 卸载。重新加载后才会连接摄像头与“练了吗”实时姿态服务。
                         </p>
                         <button
                           type="button"
