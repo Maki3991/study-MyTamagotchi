@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorldJSON 世界元素（冻结 v1 · 2026-07-22）",
+  "type": "object",
+  "required": ["world_name", "climate", "temperament", "landmarks", "residents"],
+  "properties": {
+    "world_name": {"type": "string", "maxLength": 8, "description": "≤8个汉字，不得叫『XX的世界』"},
+    "climate": {"type": "string", "maxLength": 20, "description": "气候/时间氛围，一句话"},
+    "temperament": {"type": "string", "maxLength": 20, "description": "世界气质，一句话"},
+    "landmarks": {
+      "type": "array", "minItems": 3, "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["type", "name", "from", "slot"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["lab", "shelf", "statue", "garden", "observatory", "workshop",
+                     "cafe", "library", "lighthouse", "stage", "gym", "kitchen",
+                     "garage", "greenhouse", "dock", "campfire", "treehouse", "museum",
+                     "arcade", "studio", "radio_tower", "shrine", "market", "theater",
+                     "clocktower", "windmill", "pond", "mountain", "tunnel", "archive"],
+            "description": "30 种预制地标类型之一，与美术素材一一对应"
+          },
+          "name": {"type": "string", "maxLength": 12},
+          "from": {"type": "string", "description": "出处：画像里的哪个字段/事实"},
+          "slot": {"type": "integer", "minimum": 0, "description": "地图槽位，从 0 递增"}
+        }
+      }
+    },
+    "residents": {
+      "type": "array", "minItems": 1, "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "personality"],
+        "properties": {
+          "name": {"type": "string"},
+          "personality": {"type": "string", "maxLength": 20}
+        }
+      }
+    }
+  }
+}

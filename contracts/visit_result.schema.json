@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VisitResult 游记+契合结果（冻结 v1 · 2026-07-22）",
+  "type": "object",
+  "required": ["travelogue_a", "travelogue_b", "resonance"],
+  "properties": {
+    "travelogue_a": {"$ref": "#/$defs/travelogue", "description": "A 的使者从 B 的世界带回的游记"},
+    "travelogue_b": {"$ref": "#/$defs/travelogue"},
+    "resonance": {
+      "type": "object",
+      "required": ["score", "line", "opener", "hardware_feedback"],
+      "properties": {
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "line": {"type": "string", "maxLength": 40, "description": "一句话共鸣解释"},
+        "opener": {"type": "string", "maxLength": 30, "description": "值得聊的那件事"},
+        "hardware_feedback": {
+          "type": "object",
+          "required": ["led_rgb", "pattern", "epoch_ms"],
+          "properties": {
+            "led_rgb": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+            "pattern": {"type": "string", "enum": ["breath", "pulse", "calm"]},
+            "epoch_ms": {"type": "integer", "description": "双板同频相位对齐起始时间戳，服务端填入"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "travelogue": {
+      "type": "object",
+      "required": ["bubbles", "travelogue"],
+      "properties": {
+        "bubbles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["slot", "text"],
+            "properties": {
+              "slot": {"type": "integer", "minimum": 0},
+              "text": {"type": "string", "maxLength": 15}
+            }
+          },
+          "description": "slot 必须与主人世界地标 slot 一一对应"
+        },
+        "travelogue": {"type": "string", "maxLength": 150}
+      }
+    }
+  }
+}
