@@ -6933,6 +6933,14 @@ type PlazaEnvoyPosition = {
   visiting: boolean;
 };
 
+type SkillPlazaPosition = {
+  x: number;
+  y: number;
+  scale: number;
+  detailed: boolean;
+  visible: boolean;
+};
+
 const PLAZA_ENVOY_WORLD_IDS = [
   "w_aoye",
   "w_duorou",
@@ -6942,14 +6950,17 @@ const PLAZA_ENVOY_WORLD_IDS = [
   "w_wanjuzhan",
 ] as const;
 
-function PlazaScenePanel({ members, onOpenAgent }: {
+function PlazaScenePanel({ members, skills, onOpenAgent, onOpenSkill }: {
   members: PlazaSceneMember[];
+  skills: PlazaSkill[];
   onOpenAgent: (agentId: string) => void;
+  onOpenSkill: (skillId: string) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [mapReady, setMapReady] = useState(false);
   const [envoyPositions, setEnvoyPositions] = useState<Record<string, PlazaEnvoyPosition>>({});
   const [connectionCount, setConnectionCount] = useState(0);
+  const [skillPlazaPosition, setSkillPlazaPosition] = useState<SkillPlazaPosition | null>(null);
 
   useEffect(() => {
     const receiveMapState = (event: MessageEvent) => {
@@ -6957,6 +6968,7 @@ function PlazaScenePanel({ members, onOpenAgent }: {
       if (event.data?.type !== "forkworld:plaza-state") return;
       setEnvoyPositions(event.data.envoys || {});
       setConnectionCount(event.data.connections || 0);
+      setSkillPlazaPosition(event.data.skillPlaza || null);
       setMapReady(true);
     };
     window.addEventListener("message", receiveMapState);
@@ -6969,7 +6981,7 @@ function PlazaScenePanel({ members, onOpenAgent }: {
       <iframe
         ref={iframeRef}
         title="ForkWorld 完整世界地图"
-        src="/forkworld-map/global.html?bg=1&embed=1&external_agents=1&shell=4"
+        src="/forkworld-map/global.html?bg=1&embed=1&external_agents=1&shell=5"
         onLoad={() => setMapReady(true)}
         style={{ position:"absolute", inset:0, width:"100%", height:"100%", border:0, background:"#F5F0E8" }}
       />
@@ -6980,6 +6992,113 @@ function PlazaScenePanel({ members, onOpenAgent }: {
           background:"#F5F0E8", color:"#7A7468", fontSize:"var(--ui-font-caption)",
         }}>
           正在进入世界地图…
+        </div>
+      )}
+
+      {skillPlazaPosition?.visible && (
+        <div style={{
+          position: "absolute",
+          left: skillPlazaPosition.x,
+          top: skillPlazaPosition.y,
+          width: skillPlazaPosition.detailed ? 236 : 112,
+          height: skillPlazaPosition.detailed ? 196 : 48,
+          zIndex: 11,
+          pointerEvents: "none",
+          transform: `translate(-50%, -50%) scale(${skillPlazaPosition.scale})`,
+          transformOrigin: "center",
+        }}>
+          {skillPlazaPosition.detailed && skills.slice(0, 6).map((skill, index) => {
+            const positions = [
+              { left: 71, top: 4 },
+              { left: 140, top: 39 },
+              { left: 140, top: 127 },
+              { left: 71, top: 162 },
+              { left: 2, top: 127 },
+              { left: 2, top: 39 },
+            ];
+            const position = positions[index];
+            return (
+              <button
+                key={skill.id}
+                type="button"
+                onClick={() => onOpenSkill(skill.id)}
+                style={{
+                  position: "absolute",
+                  left: position.left,
+                  top: position.top,
+                  width: 94,
+                  minHeight: 30,
+                  padding: "5px 6px",
+                  borderRadius: 9,
+                  border: `1px solid ${skill.color}70`,
+                  background: "rgba(250,246,239,.96)",
+                  boxShadow: "0 2px 0 rgba(28,25,17,.1)",
+                  color: "#1C1911",
+                  cursor: "pointer",
+                  pointerEvents: "auto",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <span style={{
+                  display: "inline-block",
+                  width: 5,
+                  height: 5,
+                  marginRight: 5,
+                  borderRadius: 2,
+                  background: skill.color,
+                  verticalAlign: 1,
+                }}/>
+                <span style={{ fontSize: "var(--ui-font-micro)" }}>{skill.name}</span>
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => skills[0] && onOpenSkill(skills[0].id)}
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              width: skillPlazaPosition.detailed ? 112 : 112,
+              minHeight: skillPlazaPosition.detailed ? 54 : 48,
+              padding: "7px 8px",
+              transform: "translate(-50%, -50%)",
+              borderRadius: 13,
+              border: "1px solid rgba(74,127,165,.48)",
+              background: "rgba(250,246,239,.97)",
+              boxShadow: "0 3px 0 rgba(28,25,17,.12)",
+              color: "#1C1911",
+              cursor: "pointer",
+              pointerEvents: "auto",
+            }}
+          >
+            <span style={{
+              display: "block",
+              color: "#4A7FA5",
+              fontSize: "var(--ui-font-micro)",
+              letterSpacing: 1,
+            }}>
+              SKILL PLAZA
+            </span>
+            <span style={{
+              display: "block",
+              marginTop: 4,
+              fontSize: "var(--ui-font-caption)",
+            }}>
+              技能交换中心
+            </span>
+            {skillPlazaPosition.detailed && (
+              <span style={{
+                display: "block",
+                marginTop: 4,
+                color: "#6B9E7A",
+                fontSize: "var(--ui-font-micro)",
+              }}>
+                {skills.length} SKILLS · 点击学习
+              </span>
+            )}
+          </button>
         </div>
       )}
 
@@ -7291,9 +7410,14 @@ function PlazaScreen({ sceneControl }: { sceneControl: React.ReactNode }) {
           {plazaTab === "square" ? (
             <PlazaScenePanel
               members={members}
+              skills={allSkills}
               onOpenAgent={agentId => {
                 setSelectedAgentId(agentId);
                 setPlazaTab("agents");
+              }}
+              onOpenSkill={skillId => {
+                setSelectedSkillId(skillId);
+                setPlazaTab("skills");
               }}
             />
           ) : plazaTab === "agents" ? (

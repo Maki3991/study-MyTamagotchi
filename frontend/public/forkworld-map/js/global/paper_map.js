@@ -131,17 +131,32 @@ FW.Paper = (function () {
     seg(x, y + h - r, x, y + r);
   }
 
-  // ── 中心广场 + 放射微弯土路（保留程序化，观感已好）──────────────────
+  // ── Skill 广场 + 放射微弯土路 ───────────────────────────────
   function buildRoads(scene, REG, MAP_W, MAP_H) {
     const g = scene.add.graphics().setDepth(-2);
     const cx = MAP_W / 2, cy = MAP_H / 2;
-    g.fillStyle(0xc8c2b4, 1).fillCircle(cx, cy, 110);
-    g.lineStyle(2, INK, 0.16).strokeCircle(cx, cy, 110);
-    g.lineStyle(1.5, 0xffffff, 0.4).strokeCircle(cx, cy, 84);
     for (const w of REG.worlds) {
       const ax = w.region.anchor[0] * TILE + 16, ay = w.region.anchor[1] * TILE + 16;
       roadPath(g, cx, cy, ax, ay);
     }
+
+    // 道路在广场边缘汇合；中央保留为技能交换区。
+    g.fillStyle(INK, 0.08).fillCircle(cx + 4, cy + 6, 118);
+    g.fillStyle(0xeae5da, 1).fillCircle(cx, cy, 116);
+    g.lineStyle(2, INK, 0.16).strokeCircle(cx, cy, 116);
+    g.fillStyle(0xfaf6ef, 0.98).fillCircle(cx, cy, 96);
+    g.lineStyle(2, 0x4a7fa5, 0.48).strokeCircle(cx, cy, 96);
+    g.lineStyle(2, 0x6b9e7a, 0.42).strokeCircle(cx, cy, 76);
+
+    const skillColors = [0xe8634a, 0x579447, 0x4a7fa5, 0x696858, 0x6d6884, 0x8a543b];
+    skillColors.forEach((color, index) => {
+      const angle = -Math.PI / 2 + index * Math.PI / 3;
+      const sx = cx + Math.cos(angle) * 87;
+      const sy = cy + Math.sin(angle) * 87;
+      g.fillStyle(0xfaf6ef, 1).fillCircle(sx, sy, 9);
+      g.lineStyle(2, color, 0.9).strokeCircle(sx, sy, 9);
+      g.fillStyle(color, 0.9).fillCircle(sx, sy, 3);
+    });
     return g;
   }
   function roadPath(g, x1, y1, x2, y2) {

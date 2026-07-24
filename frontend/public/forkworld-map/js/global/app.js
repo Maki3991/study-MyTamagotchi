@@ -446,6 +446,9 @@
     const rect = scene.game.canvas.getBoundingClientRect();
     const scaleX = rect.width / view.width;
     const scaleY = rect.height / view.height;
+    const skillPlazaX = rect.left + (MAP_W / 2 - view.x) * scaleX;
+    const skillPlazaY = rect.top + (MAP_H / 2 - view.y) * scaleY;
+    const skillPlazaDiameter = 232 * Math.min(scaleX, scaleY);
     const payload = {};
     for (const id in envoys) {
       const env = envoys[id];
@@ -466,6 +469,17 @@
       envoys: payload,
       connections: beams.length,
       cruiseMode: CruiseState.mode,
+      skillPlaza: {
+        x: skillPlazaX,
+        y: skillPlazaY,
+        scale: skillPlazaDiameter >= 180
+          ? Phaser.Math.Clamp(skillPlazaDiameter / 232, 0.82, 1.08)
+          : 0.72,
+        detailed: skillPlazaDiameter >= 180,
+        visible:
+          skillPlazaX > -140 && skillPlazaX < rect.width + 140 &&
+          skillPlazaY > -140 && skillPlazaY < rect.height + 140,
+      },
     }, "*");
   }
 
