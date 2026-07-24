@@ -60,6 +60,7 @@ import pentimentBakeryPng from "../assets/world/style-skills/pentiment/buildings
 import pentimentChapelPng from "../assets/world/style-skills/pentiment/buildings/chapel.png";
 import pentimentGatehousePng from "../assets/world/style-skills/pentiment/buildings/gatehouse.png";
 import petDachshundPng from "../assets/world/pet-agents/sprites/dachshund.png";
+import petSiamesePng from "../assets/world/pet-agents/sprites/siamese.png";
 import petCatPng from "../assets/world/pet-agents/sprites/cat.png";
 import petRabbitPng from "../assets/world/pet-agents/sprites/rabbit.png";
 import petHamsterPng from "../assets/world/pet-agents/sprites/hamster.png";
@@ -928,6 +929,7 @@ const AGENT_PROFILES: AgentProfile[] = [
   { id: "joypad", name: "Joypad", role: "Quest Host", world: "Stardom", memories: 11, color: "#E8191A", badge: "PARTY", visiting: true, render: (s, animated) => <CurioAgent x={0} y={4} kind="controller" s={s} accent="#E8191A" animated={animated}/> },
   { id: "mizzle", name: "Mizzle", role: "Rain Walker", world: "Colony", memories: 5, color: "#0070F3", badge: "RAIN", render: (s, animated) => <CurioAgent x={0} y={4} kind="umbrella" s={s} accent="#0070F3" animated={animated}/> },
   { id: "dotti", name: "Dotti", role: "Memory Trail Keeper", world: "Memory Town", memories: 4, color: "#B67C42", badge: "PET", render: (s, animated) => <PetSpriteAgent src={petDachshundPng} size={92 * s} animated={animated}/> },
+  { id: "siamese", name: "暹罗猫", role: "温柔陪伴者", world: "Memory Town", memories: 1, color: "#9B7653", badge: "PET", render: (s, animated) => <PetSpriteAgent src={petSiamesePng} size={78 * s} animated={animated}/> },
   { id: "momo", name: "Momo", role: "Quiet Companion", world: "Memory Town", memories: 7, color: "#E88752", badge: "PET", render: (s, animated) => <PetSpriteAgent src={petCatPng} size={78 * s} animated={animated}/> },
   { id: "puff", name: "Puff", role: "Dream Messenger", world: "Memory Town", memories: 3, color: "#C890C0", badge: "PET", render: (s, animated) => <PetSpriteAgent src={petRabbitPng} size={80 * s} animated={animated}/> },
   { id: "pip", name: "Pip", role: "Keepsake Collector", world: "Memory Town", memories: 5, color: "#4A4A46", badge: "PET", render: (s, animated) => <PetSpriteAgent src={petHamsterPng} size={76 * s} animated={animated}/> },
@@ -5819,7 +5821,7 @@ function AgentGalleryScreen({ navigate, section, onSectionChange, drafts, onEdit
           </div>
           <div className="grid grid-cols-2 gap-3 pb-4">
           {agentStyle === "dailySpirits" ? <>
-            {capturedPets.map(pet => (
+            {capturedPets.filter(pet => pet.name !== "暹罗猫").map(pet => (
               <button key={pet.id} onClick={() => navigate("everydayTown")}
                 aria-label={`查看 ${pet.name}`}
                 className="rounded-2xl overflow-hidden text-left"
@@ -5973,6 +5975,42 @@ function CharacterSettingsGalleryScreen({ drafts, initialCategory, initialType, 
 
 // 18. T5-E1 PET HARDWARE DIGITAL TWIN
 type DevicePetState = "idle" | "happy" | "listening" | "talking" | "playful" | "sleeping";
+type DevicePetId = "dotti" | "siamese";
+
+const DEVICE_PETS: Record<DevicePetId, {
+  name: string;
+  optionLabel: string;
+  screenName: string;
+  species: string;
+  image: string;
+  accent: string;
+  speech?: Partial<Record<DevicePetState, string>>;
+}> = {
+  dotti: {
+    name: "Dotti",
+    optionLabel: "腊肠犬 Dotti",
+    screenName: "DOTTI",
+    species: "腊肠犬伙伴",
+    image: petDachshundPng,
+    accent: "#B67C42",
+  },
+  siamese: {
+    name: "暹罗猫",
+    optionLabel: "暹罗猫",
+    screenName: "暹罗猫",
+    species: "暹罗猫伙伴",
+    image: petSiamesePng,
+    accent: "#9B7653",
+    speech: {
+      idle: "我在这里，轻轻摸一下屏幕吧。",
+      happy: "喵～你回来啦，今天也陪我晒太阳吗？",
+      listening: "我在听，把今天的秘密告诉我吧。",
+      talking: "喵！我已经记住你的声音啦。",
+      playful: "尾巴竖起来了！再轻轻晃一下吧。",
+      sleeping: "晚安……我会蜷在记忆旁边守着你。",
+    },
+  },
+};
 
 const DEVICE_PET_STATES: Record<DevicePetState, {
   label: string;
@@ -5989,10 +6027,15 @@ const DEVICE_PET_STATES: Record<DevicePetState, {
 };
 
 function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void; archiveTabs?: React.ReactNode }) {
+  const [selectedPet, setSelectedPet] = useState<DevicePetId>("dotti");
   const [petState, setPetState] = useState<DevicePetState>("idle");
   const [activeControl, setActiveControl] = useState("TOUCH");
   const [eventCount, setEventCount] = useState(1);
-  const state = DEVICE_PET_STATES[petState];
+  const devicePet = DEVICE_PETS[selectedPet];
+  const state = {
+    ...DEVICE_PET_STATES[petState],
+    speech: devicePet.speech?.[petState] || DEVICE_PET_STATES[petState].speech,
+  };
 
   const triggerPet = (control: string, nextState: DevicePetState) => {
     setActiveControl(control);
@@ -6004,6 +6047,13 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
     const sequence: DevicePetState[] = ["happy", "playful", "talking", "idle"];
     const currentIndex = sequence.indexOf(petState);
     triggerPet("TOUCH", sequence[(currentIndex + 1) % sequence.length]);
+  };
+
+  const handlePetChange = (nextPet: DevicePetId) => {
+    setSelectedPet(nextPet);
+    setPetState("idle");
+    setActiveControl("SELECT");
+    setEventCount(count => count + 1);
   };
 
   const petAnimation = {
@@ -6023,7 +6073,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
     nextState: DevicePetState;
   }[] = [
     { id: "TOUCH", title: "轻触圆屏", detail: "抚摸 · 切换动作", icon: <Heart size={14}/>, nextState: "happy" },
-    { id: "KEY", title: "KEY 按键", detail: "让 Dotti 回应", icon: <Volume2 size={14}/>, nextState: "talking" },
+    { id: "KEY", title: "KEY 按键", detail: `让${devicePet.name}回应`, icon: <Volume2 size={14}/>, nextState: "talking" },
     { id: "MIC", title: "麦克风", detail: "唤醒 · 开始聆听", icon: <Mic size={14}/>, nextState: "listening" },
     { id: "IMU", title: "轻晃设备", detail: "六轴感应 · 玩耍", icon: <RotateCw size={14}/>, nextState: "playful" },
   ];
@@ -6046,9 +6096,42 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
           <p style={{ fontSize: "var(--ui-font-caption)", letterSpacing: ".8px", color: "#7A7468" }}>T5-E1 · DIGITAL TWIN</p>
           <p style={{ marginTop: 3, fontFamily: "VT323,monospace", fontSize: "var(--ui-font-body)", color: "#1C1911" }}>1.75” AMOLED · 466×466</p>
         </div>
-        <div className="absolute top-3 right-3 flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#6B9E7A" }}/>
-          <span style={{ fontSize: "var(--ui-font-caption)", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", color: "#6B9E7A" }}>在线</span>
+        <div className="absolute top-3 right-3 flex flex-col items-end" style={{ zIndex: 4 }}>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#6B9E7A" }}/>
+            <span style={{ fontSize: "var(--ui-font-caption)", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", color: "#6B9E7A" }}>在线</span>
+          </div>
+          <div className="relative" style={{ marginTop: 5 }}>
+            <select
+              aria-label="选择设备 Agent"
+              value={selectedPet}
+              onChange={event => handlePetChange(event.target.value as DevicePetId)}
+              style={{
+                appearance: "none",
+                WebkitAppearance: "none",
+                width: 106,
+                height: 28,
+                padding: "0 24px 0 8px",
+                borderRadius: 9,
+                border: `1.5px solid ${devicePet.accent}65`,
+                background: `${devicePet.accent}12`,
+                color: "#1C1911",
+                outline: "none",
+                fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif",
+                fontSize: "var(--ui-font-micro)",
+                cursor: "pointer",
+              }}
+            >
+              {(Object.entries(DEVICE_PETS) as [DevicePetId, (typeof DEVICE_PETS)[DevicePetId]][]).map(([id, pet]) => (
+                <option key={id} value={id}>{pet.optionLabel}</option>
+              ))}
+            </select>
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              style={{ position: "absolute", right: 7, top: 8, color: devicePet.accent, pointerEvents: "none" }}
+            />
+          </div>
         </div>
 
         <div className="flex justify-center" style={{ paddingTop: 42 }}>
@@ -6065,7 +6148,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
             <button
               type="button"
               onClick={handleScreenTouch}
-              aria-label={`轻触圆形屏幕，Dotti 当前${state.label}`}
+              aria-label={`轻触圆形屏幕，${devicePet.name}当前${state.label}`}
               className="absolute rounded-full overflow-hidden"
               style={{
                 inset: 18,
@@ -6078,7 +6161,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
             >
               <div className="absolute top-3 left-0 right-0 flex items-center justify-center gap-1.5">
                 <span style={{ width: 4, height: 4, borderRadius: "50%", background: state.accent }}/>
-                <span style={{ color: "#1C1911", fontSize: "var(--ui-font-micro)", letterSpacing: ".8px" }}>DOTTI · {state.label}</span>
+                <span style={{ color: "#1C1911", fontSize: "var(--ui-font-micro)", letterSpacing: ".8px" }}>{devicePet.screenName} · {state.label}</span>
               </div>
 
               <AnimatePresence mode="wait">
@@ -6106,12 +6189,21 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
               </AnimatePresence>
 
               <motion.img
-                src={petDachshundPng}
-                alt="圆形 AMOLED 屏幕上的腊肠狗 Dotti"
+                key={selectedPet}
+                src={devicePet.image}
+                alt={`圆形 AMOLED 屏幕上的${devicePet.name}`}
                 draggable={false}
                 animate={petAnimation}
                 transition={{ duration: petState === "sleeping" ? .45 : 1.6, repeat: petState === "sleeping" ? 0 : Infinity, ease: "easeInOut" }}
-                style={{ position: "absolute", width: 122, height: 108, objectFit: "contain", left: "50%", bottom: 20, marginLeft: -61 }}
+                style={{
+                  position: "absolute",
+                  width: selectedPet === "siamese" ? 104 : 122,
+                  height: 108,
+                  objectFit: "contain",
+                  left: "50%",
+                  bottom: 20,
+                  marginLeft: selectedPet === "siamese" ? -52 : -61,
+                }}
               />
               <motion.div
                 animate={{ scaleX: petState === "playful" ? [1, .72, 1.08, 1] : [1, .92, 1] }}
@@ -6150,7 +6242,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
             </button>
             <button
               type="button"
-              aria-label="KEY 用户按键，让 Dotti 回应"
+              aria-label={`KEY 用户按键，让${devicePet.name}回应`}
               onClick={() => triggerPet("KEY", "talking")}
               className="absolute"
               style={{
@@ -6181,13 +6273,13 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
       <div className="px-5 mt-3 flex items-center gap-3">
         <div
           className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden"
-          style={{ background: "#B67C4214", border: "1.5px solid #B67C4240" }}
+          style={{ background: `${devicePet.accent}14`, border: `1.5px solid ${devicePet.accent}40` }}
         >
-          <img src={petDachshundPng} alt="" draggable={false} style={{ width: 54, height: 48, objectFit: "contain" }}/>
+          <img src={devicePet.image} alt="" draggable={false} style={{ width: 54, height: 48, objectFit: "contain" }}/>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700, color: "#1C1911" }}>Dotti</p>
+            <p style={{ fontFamily: "Caveat,cursive", fontSize: "var(--ui-font-page-title)", fontWeight: 700, color: "#1C1911" }}>{devicePet.name}</p>
             <span
               className="rounded-full"
               style={{ padding: "3px 7px", color: state.accent, background: `${state.accent}14`, border: `1px solid ${state.accent}45`, fontSize: "var(--ui-font-caption)" }}
@@ -6195,8 +6287,8 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
               {state.label}
             </span>
           </div>
-          <p style={{ fontSize: "var(--ui-font-body)", color: "#B67C42", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
-            腊肠犬伙伴 · Memory Town 数字宠物
+          <p style={{ fontSize: "var(--ui-font-body)", color: devicePet.accent, fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif" }}>
+            {devicePet.species} · Memory Town 数字宠物
           </p>
         </div>
       </div>
@@ -6244,7 +6336,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
             <span style={{ color: "#7A7468", fontFamily: "VT323,monospace", fontSize: "var(--ui-font-body)" }}>WEB → T5-E1</span>
           </div>
           <p style={{ marginTop: 7, color: "#1C1911", fontFamily: "'Fusion Pixel 10px Monospaced SC',sans-serif", fontSize: "var(--ui-font-body)", lineHeight: 1.5 }}>
-            {activeControl} 输入已映射：Dotti 进入「{state.label}」，心情变为「{state.mood}」。
+            {activeControl} 输入已映射：{devicePet.name}进入「{state.label}」，心情变为「{state.mood}」。
           </p>
           <div className="flex items-center gap-3 mt-2">
             {[
@@ -6276,7 +6368,7 @@ function Esp32Screen({ navigate, archiveTabs }: { navigate: (s: Screen) => void;
           }}
         >
           <Zap size={13}/>
-          {petState === "sleeping" ? "唤醒圆屏宠物" : "模拟 PWR · 让 Dotti 休眠"}
+          {petState === "sleeping" ? "唤醒圆屏宠物" : `模拟 PWR · 让${devicePet.name}休眠`}
         </button>
       </div>
     </div>
