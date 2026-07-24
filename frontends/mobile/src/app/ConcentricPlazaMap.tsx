@@ -13,8 +13,6 @@ import {
 } from "react";
 import { ArrowRight, Home, Minus, Plus, Radio, Users } from "lucide-react";
 import concentricCommonsMap from "../assets/world/plaza/concentric-commons.png";
-import petDachshundPng from "../assets/world/pet-agents/sprites/dachshund.png";
-import type { PlazaSkill } from "./plazaSkills";
 import "./ConcentricPlazaMap.css";
 
 export type ConcentricPlazaMember = {
@@ -39,11 +37,15 @@ export type PlazaUserHouse = {
   color: string;
 };
 
+export type PlazaConverseLine = {
+  memberId: string;
+  name: string;
+  text: string;
+};
+
 type ConcentricPlazaMapProps = {
   members: ConcentricPlazaMember[];
-  skills: PlazaSkill[];
   onOpenAgent: (agentId: string) => void;
-  onOpenSkill: (skillId: string) => void;
   featuredHouses?: FeaturedPlazaHouse[];
   userHouse?: PlazaUserHouse | null;
   selectingHouse?: boolean;
@@ -51,6 +53,10 @@ type ConcentricPlazaMapProps = {
   onOpenUserWorld?: () => void;
   focusMemberId?: string | null;
   focusRequest?: number;
+  /** 对谈进行时的两位参与者；只有此时才在地图上画出连结。 */
+  conversePair?: [string, string] | null;
+  /** 对谈进行时当前正在说的一句台词。 */
+  converseLine?: PlazaConverseLine | null;
 };
 
 type MapView = {
@@ -118,15 +124,6 @@ const MEMBER_POSITIONS = [
   { x: 836, y: 300, dx: -14, dy: 10 },
 ];
 
-const PLAZA_TRAINING_LINES = [
-  { speaker: "Miko", topic: "动作质量", color: "#E8634A", text: "慢一点下蹲，膝盖和脚尖保持同向。" },
-  { speaker: "Atlas", topic: "训练计划", color: "#579447", text: "先建立稳定动作，再逐步增加训练量。" },
-  { speaker: "Shutter", topic: "姿态观察", color: "#4A7FA5", text: "我记录到背部更稳定了，下一轮保持呼吸。" },
-  { speaker: "Noct", topic: "恢复节奏", color: "#6D6884", text: "疲劳不是失败，恢复也是训练的一部分。" },
-  { speaker: "Ansel", topic: "长期习惯", color: "#8A543B", text: "把训练拆成每天都能完成的小步骤。" },
-  { speaker: "Ink", topic: "安全边界", color: "#6A6957", text: "出现刺痛就停止，先确认身体发出的信号。" },
-];
-
 function getGesture(points: Map<number, PointerPoint>) {
   const values = Array.from(points.values());
   if (values.length === 0) return null;
@@ -145,9 +142,7 @@ function getGesture(points: Map<number, PointerPoint>) {
 
 export function ConcentricPlazaMap({
   members,
-  skills,
   onOpenAgent,
-  onOpenSkill,
   featuredHouses = [],
   userHouse = null,
   selectingHouse = false,
@@ -155,6 +150,8 @@ export function ConcentricPlazaMap({
   onOpenUserWorld,
   focusMemberId = null,
   focusRequest = 0,
+  conversePair = null,
+  converseLine = null,
 }: ConcentricPlazaMapProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<MapView>({ scale: 0.4, x: 0, y: 0 });
@@ -164,14 +161,6 @@ export function ConcentricPlazaMap({
   const [view, setView] = useState(viewRef.current);
   const [dragging, setDragging] = useState(false);
   const [activeHouseId, setActiveHouseId] = useState<string | null>(null);
-  const [dialogueIndex, setDialogueIndex] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setDialogueIndex(current => (current + 1) % PLAZA_TRAINING_LINES.length);
-    }, 2900);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const houses = useMemo(() => HOUSE_SLOTS.map((house, index) => {
     const memberIndex = OCCUPIED_HOUSE_INDEXES.indexOf(index);
@@ -183,10 +172,15 @@ export function ConcentricPlazaMap({
     };
   }), [featuredHouses, members, userHouse]);
   const activeHouse = houses.find(house => house.id === activeHouseId);
-  const activeTrainingLine = PLAZA_TRAINING_LINES[dialogueIndex];
-  const responseLine = dialogueIndex % 2 === 0
-    ? "收到。先把动作做稳，我们再一起进入下一组。"
-    : "很好，把这条经验写进今天的共同训练记录。";
+  const memberPositionById = (memberId: string) => {
+    const index = members.findIndex(member => member.id === memberId);
+    if (index < 0) return null;
+    return MEMBER_POSITIONS[index % MEMBER_POSITIONS.length];
+  };
+  const conversePositions = conversePair
+    ? [memberPositionById(conversePair[0]), memberPositionById(conversePair[1])]
+    : [null, null];
+  const converseSpeakerPosition = converseLine ? memberPositionById(converseLine.memberId) : null;
 
   const constrainView = useCallback((next: MapView) => {
     const { width, height } = viewportSizeRef.current;
@@ -456,38 +450,25 @@ export function ConcentricPlazaMap({
           })}
         </div>
 
-        <svg className="concentric-plaza-map__learning-links" viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} aria-hidden="true">
-          {MEMBER_POSITIONS.map((position, index) => (
+        {conversePositions[0] && conversePositions[1] && (
+          <svg className="concentric-plaza-map__learning-links" viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} aria-hidden="true">
             <path
-              key={index}
-              d={`M ${position.x} ${position.y} Q ${(position.x + 836) / 2} ${position.y < 470 ? 390 : 550} 836 470`}
+              d={`M ${conversePositions[0].x} ${conversePositions[0].y} Q ${(conversePositions[0].x + conversePositions[1].x) / 2} ${Math.min(conversePositions[0].y, conversePositions[1].y) - 80} ${conversePositions[1].x} ${conversePositions[1].y}`}
             />
-          ))}
-        </svg>
+          </svg>
+        )}
 
-        <div className="concentric-plaza-map__learning-scene">
-          <button
-            type="button"
-            className="concentric-plaza-map__dachshund"
-            onClick={event => {
-              event.stopPropagation();
-              onOpenSkill(skills.find(skill => skill.id === "fitness-companion")?.id ?? skills[0]?.id ?? "fitness-companion");
-            }}
-            aria-label="查看腊肠犬 Dotti 正在组织的健身学习"
+        {converseLine && converseSpeakerPosition && (
+          <div
+            className="concentric-plaza-map__converse"
+            style={{ left: converseSpeakerPosition.x, top: converseSpeakerPosition.y }}
           >
-            <span className="concentric-plaza-map__dachshund-pulse" />
-            <img src={petDachshundPng} alt="腊肠犬主智能体 Dotti" draggable={false} />
-            <span><strong>Dotti</strong><small>主智能体</small></span>
-          </button>
-          <div className="concentric-plaza-map__dialogue is-npc" key={`npc-${dialogueIndex}`}>
-            <span style={{ color: activeTrainingLine.color }}>{activeTrainingLine.speaker} · {activeTrainingLine.topic}</span>
-            <p>{activeTrainingLine.text}</p>
+            <div className="concentric-plaza-map__dialogue is-npc" key={`${converseLine.memberId}-${converseLine.text}`}>
+              <span>{converseLine.name}</span>
+              <p>{converseLine.text}</p>
+            </div>
           </div>
-          <div className="concentric-plaza-map__dialogue is-dotti" key={`dotti-${dialogueIndex}`}>
-            <span>Dotti · 共同训练</span>
-            <p>{responseLine}</p>
-          </div>
-        </div>
+        )}
 
         {members.map((member, index) => {
           const position = MEMBER_POSITIONS[index % MEMBER_POSITIONS.length];
@@ -528,7 +509,7 @@ export function ConcentricPlazaMap({
 
       <header className="concentric-plaza-map__status">
         <span><Radio size={10} /> {selectingHouse ? "SELECT A HOME" : "LIVE PLAZA"}</span>
-        <b><Users size={10} /> {members.length + 1} LEARNING · {HOUSE_SLOTS.length} HOUSES</b>
+        <b><Users size={10} /> {members.length} AGENTS · {HOUSE_SLOTS.length} HOUSES</b>
       </header>
 
       <div className="concentric-plaza-map__zoom">{Math.round(view.scale * 100)}%</div>

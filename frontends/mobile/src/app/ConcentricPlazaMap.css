@@ -223,6 +223,20 @@
   transform: translateX(-50%);
 }
 
+.concentric-plaza-map__converse {
+  position: absolute;
+  z-index: 7;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.concentric-plaza-map__converse .concentric-plaza-map__dialogue.is-npc {
+  top: auto;
+  bottom: 66px;
+  left: -106px;
+}
+
 .concentric-plaza-map__dialogue {
   position: absolute;
   z-index: 6;

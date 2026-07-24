@@ -31,6 +31,19 @@ class Agent(SQLModel, table=True):
     last_interact_at: datetime = Field(default_factory=now)
 
 
+class AgentTemplate(SQLModel, table=True):
+    """图鉴模板：没有主人、没有记忆的现成角色。
+
+    用户不想拍照导入时，可以从图鉴复制一只——复制时才会在 agent 表建档。
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    category: str
+    emoji: str = "📦"
+    trait: str = ""
+    description: str = ""
+
+
 class WorldEventRow(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     tick: int

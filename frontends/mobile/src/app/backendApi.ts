@@ -76,6 +76,16 @@ export type CatalogSkill = {
 
 export type DialogLine = { agent_id: number; name: string; emoji: string; text: string };
 
+/** 图鉴模板：无主人、无记忆，复制时才在 DB 建 agent 档案。 */
+export type AgentTemplateRow = {
+  id: number;
+  name: string;
+  category: string;
+  emoji: string;
+  trait: string;
+  description: string;
+};
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -109,6 +119,22 @@ export const backendApi = {
       body: JSON.stringify({ text }),
     }),
   plazaAgents: () => req<BackendAgent[]>("/plaza"),
+  plazaConverse: () =>
+    req<{ lines: DialogLine[]; learned: { learner: string; learner_id: number; teacher: string; skill: string } | null }>(
+      "/plaza/converse",
+      { method: "POST" },
+    ),
+  worldConverse: () =>
+    req<{ lines: DialogLine[] }>("/world/converse", {
+      method: "POST",
+      body: JSON.stringify({ user_id: ME_USER_ID }),
+    }),
+  templates: () => req<AgentTemplateRow[]>("/templates"),
+  adoptTemplate: (templateId: number, name?: string) =>
+    req<BackendAgent>(`/templates/${templateId}/adopt`, {
+      method: "POST",
+      body: JSON.stringify({ owner_id: ME_USER_ID, name: name ?? null }),
+    }),
   plazaSkills: () => req<CatalogSkill[]>("/skills?location=plaza"),
   allSkills: () => req<CatalogSkill[]>("/skills"),
   learn: (skillId: number, learnerId?: number) =>

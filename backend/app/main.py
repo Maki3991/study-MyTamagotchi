@@ -14,8 +14,8 @@ from sqlmodel import Session, select
 
 from . import llm, pets, skills_runtime, world
 from .db import engine, get_session, init_db
-from .models import Agent, Artifact, Memory, Skill, User, now
-from .seed import seed, sync_default_skills
+from .models import Agent, AgentTemplate, Artifact, Memory, Skill, User, now
+from .seed import seed, seed_templates, sync_default_skills
 
 app = FastAPI(title="My Tamagotchi API")
 app.add_middleware(
@@ -44,6 +44,7 @@ async def _auto_tick_loop():
 def on_startup():
     init_db()
     seed()
+    seed_templates()
     sync_default_skills()
     pets.load_jobs_from_disk()
     asyncio.get_event_loop().create_task(_auto_tick_loop())
@@ -205,6 +206,41 @@ def dispatch_agent(agent_id: int, body: DispatchIn, session: Session = Depends(g
     agent.location = body.location
     session.add(agent)
     session.commit()
+    return agent_out(agent, session)
+
+
+# ---------- templates（图鉴：无主人、无记忆的现成模板） ----------
+
+@app.get("/api/templates")
+def list_templates(session: Session = Depends(get_session)):
+    return [t.model_dump() for t in session.exec(select(AgentTemplate)).all()]
+
+
+class AdoptIn(BaseModel):
+    owner_id: int = ME_USER_ID
+    name: str | None = None
+
+
+@app.post("/api/templates/{template_id}/adopt")
+def adopt_template(template_id: int, body: AdoptIn, session: Session = Depends(get_session)):
+    """从图鉴复制一只：此时才在 DB 建 agent 档案（无记忆，待 identity 编辑后加入世界）。"""
+    tpl = session.get(AgentTemplate, template_id)
+    if not tpl:
+        raise HTTPException(404, "template not found")
+    agent = Agent(
+        owner_id=body.owner_id,
+        name=body.name or tpl.name,
+        category=tpl.category,
+        emoji=tpl.emoji,
+        trait=tpl.trait,
+        mood=90,
+        location="home",
+        world="everyday",
+        in_world=False,
+    )
+    session.add(agent)
+    session.commit()
+    session.refresh(agent)
     return agent_out(agent, session)
 
 

@@ -36,7 +36,7 @@ export type ThemedWorldResident = {
   visitor?: boolean;
 };
 
-type TopicLine = {
+export type TopicLine = {
   speakerId: string;
   topic: string;
   text: string;
@@ -305,7 +305,6 @@ function WorldCanvas({
   onDecorationMove,
   onDecorationRemove,
   onSpeakerChange,
-  showWorldline = true,
 }: {
   config: ThemedWorldConfig;
   residents: ThemedWorldResident[];
@@ -314,7 +313,6 @@ function WorldCanvas({
   onDecorationMove?: (id: number, x: number, y: number) => void;
   onDecorationRemove?: (id: number) => void;
   onSpeakerChange?: (residentId: string) => void;
-  showWorldline?: boolean;
 }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const initialMotionRef = useRef<ResidentMotion[] | null>(null);
@@ -338,7 +336,7 @@ function WorldCanvas({
   useEffect(() => {
     setLineIndex(0);
     setSpeechVisible(true);
-    if (compact) return;
+    if (compact || config.dialogue.length === 0) return;
 
     let swapTimer = 0;
     const lineTimer = window.setInterval(() => {
@@ -535,11 +533,12 @@ function WorldCanvas({
     return () => window.cancelAnimationFrame(animationFrame);
   }, [compact, config.id, residentKey]);
 
-  const activeLine = config.dialogue[lineIndex % config.dialogue.length];
-  const activeResidentIndex = Math.max(
-    0,
-    residents.findIndex((resident) => resident.id === activeLine.speakerId),
-  );
+  const activeLine = config.dialogue.length > 0
+    ? config.dialogue[lineIndex % config.dialogue.length]
+    : null;
+  const activeResidentIndex = activeLine
+    ? Math.max(0, residents.findIndex((resident) => resident.id === activeLine.speakerId))
+    : 0;
   const residentPosition = (index: number) => residents[index]?.featured
     ? { x: 0.5, y: compact ? 0.76 : 0.66 }
     : positions[index]
@@ -551,8 +550,8 @@ function WorldCanvas({
     .filter((index, position, indexes) => index !== activeResidentIndex && indexes.indexOf(index) === position);
 
   useEffect(() => {
-    if (!compact) onSpeakerChange?.(activeLine.speakerId);
-  }, [activeLine.speakerId, compact, onSpeakerChange]);
+    if (!compact && activeLine) onSpeakerChange?.(activeLine.speakerId);
+  }, [activeLine?.speakerId, compact, onSpeakerChange]);
 
   const moveDecoration = (event: React.PointerEvent<HTMLButtonElement>, id: number) => {
     if (decorationDragRef.current !== id || !canvasRef.current) return;
@@ -590,7 +589,7 @@ function WorldCanvas({
         ))}
       </div>
 
-      {!compact && showWorldline && relationPartnerIndexes.length > 0 && (
+      {!compact && activeLine && relationPartnerIndexes.length > 0 && (
         <svg className="fixed-world-relations" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {relationPartnerIndexes.map(index => {
             const partnerPosition = residentPosition(index);
@@ -652,7 +651,7 @@ function WorldCanvas({
       {residents.map((resident, index) => {
         if (resident.visitor && !compact && resident.id !== visibleVisitorId) return null;
         const position = residentPosition(index);
-        const isSpeaking = !compact && resident.id === activeLine.speakerId;
+        const isSpeaking = !compact && resident.id === activeLine?.speakerId;
         return (
           <button
             type="button"
@@ -679,7 +678,7 @@ function WorldCanvas({
 
       {!compact && (
         <>
-          {speechVisible && (
+          {speechVisible && activeLine && (
             <div
               className={`fixed-world-speech ${activePosition.x > 0.68 ? "is-right" : activePosition.x >= 0.32 ? "is-center" : ""} ${activePosition.y < 0.38 ? "is-below" : ""}`}
               key={`${config.id}-${lineIndex}`}
@@ -693,8 +692,12 @@ function WorldCanvas({
             </div>
           )}
           <div className="fixed-world-topic">
-            <span><Radio size={9} /> WORLD TOPIC</span>
-            <p>{config.topics.join(" · ")}</p>
+            <span><Radio size={9} /> {residents.length === 0 ? "EMPTY WORLD" : "WORLD TOPIC"}</span>
+            <p>
+              {residents.length === 0
+                ? "还没有居民 —— 去 Inventory 编辑你的 agent，加入这个世界吧。"
+                : config.topics.join(" · ")}
+            </p>
           </div>
         </>
       )}
@@ -732,93 +735,6 @@ export function ThemedWorldPreview({
   );
 }
 
-function WorldRecordChain({
-  config,
-  resident,
-  tick,
-  personalityVersion,
-}: {
-  config: ThemedWorldConfig;
-  resident: ThemedWorldResident;
-  tick: number;
-  personalityVersion: number;
-}) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"learning" | "memory">("learning");
-  const [nodeIndex, setNodeIndex] = useState(3);
-  const learningItems = config.learningRecords.map((record, index) => ({
-    id: `learning-${index}`,
-    label: `v${Math.max(1, personalityVersion - (3 - index))}`,
-    tick: Math.max(0, tick - (3 - index) * 4),
-    ...record,
-  }));
-  const memoryItems = config.dialogue.map((line, index) => ({
-    id: `memory-${index}`,
-    label: `#${Math.max(0, tick - (3 - index))}`,
-    tick: Math.max(0, tick - (3 - index)),
-    title: `${line.topic}讨论`,
-    text: line.text,
-    meta: `${config.buildingName} · 主题记忆`,
-  }));
-  const items = tab === "learning" ? learningItems : memoryItems;
-  const activeIndex = Math.min(nodeIndex, items.length - 1);
-  const active = items[activeIndex];
-
-  useEffect(() => {
-    setNodeIndex(3);
-  }, [config.id, resident.id, tab]);
-
-  return (
-    <aside className={`themed-world-record ${open ? "is-open" : ""}`}>
-      <button
-        type="button"
-        className="themed-world-record__summary"
-        aria-expanded={open}
-        onClick={() => setOpen(current => !current)}
-      >
-        <span className="themed-world-record__status" />
-        <span className="themed-world-record__identity">
-          <b>{resident.name.toUpperCase()} · {tab === "learning" ? "SELF EVOLUTION" : "PERSONAL MEMORY"}</b>
-          <small>人格 v{personalityVersion} · 第 {active.tick} 回合</small>
-        </span>
-        <span className="themed-world-record__current">
-          <b>{active.title}</b>
-          <small>{active.meta}</small>
-        </span>
-        {open ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-      </button>
-
-      {open && (
-        <div className="themed-world-record__body">
-          <div className="themed-world-record__tabs" role="tablist" aria-label="Agent 记录链类型">
-            <button type="button" role="tab" aria-selected={tab === "learning"} onClick={() => setTab("learning")}>自我学习进化链</button>
-            <button type="button" role="tab" aria-selected={tab === "memory"} onClick={() => setTab("memory")}>个体记忆链</button>
-          </div>
-          <div className="themed-world-record__nodes">
-            {items.map((item, index) => (
-              <button
-                type="button"
-                key={item.id}
-                className={activeIndex === index ? "is-active" : ""}
-                onClick={() => setNodeIndex(index)}
-                aria-label={`查看记录：${item.title}`}
-              >
-                <i>{index + 1}</i>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="themed-world-record__detail">
-            <b>{active.title}</b>
-            <p>{active.text}</p>
-            <span>{active.meta} · 点击场景居民可以切换记录主体</span>
-          </div>
-        </div>
-      )}
-    </aside>
-  );
-}
-
 export function ThemedWorldScreen({
   config,
   residents,
@@ -829,9 +745,6 @@ export function ThemedWorldScreen({
   onOpenBuild,
   onCapture,
   onBack,
-  onOpenWorldline,
-  onOpenVisitor,
-  onOpenAgents,
 }: {
   config: ThemedWorldConfig;
   residents: ThemedWorldResident[];
@@ -842,14 +755,9 @@ export function ThemedWorldScreen({
   onOpenBuild: () => void;
   onCapture: () => void;
   onBack: () => void;
-  onOpenWorldline: () => void;
-  onOpenVisitor: () => void;
-  onOpenAgents: () => void;
 }) {
   const { world, error } = useWorldEvolution(3500);
   const [activeResidentId, setActiveResidentId] = useState(residents[0]?.id || "");
-  const [worldlineVisible, setWorldlineVisible] = useState(true);
-  const [visitorVisible, setVisitorVisible] = useState(true);
   const [learningProgressOpen, setLearningProgressOpen] = useState(false);
   const [chainReceiptVisible, setChainReceiptVisible] = useState(false);
   const [chainCallPending, setChainCallPending] = useState(false);
@@ -857,9 +765,7 @@ export function ThemedWorldScreen({
   const chainReceiptTimer = useRef<number | null>(null);
   const worldTopic = useMemo(() => config.topics.join(" · "), [config.topics]);
   const activeResident = residents.find(resident => resident.id === activeResidentId) || residents[0];
-  const recordSource = world?.agents.find(agent => agent.id === activeResident.recordSourceId);
   const tick = world?.meta.tick || 0;
-  const personalityVersion = recordSource?.personalityVersion || Math.max(1, Math.floor(tick / 4) + 1);
   const worldClock = world
     ? `${String(Math.floor(world.meta.minute / 60)).padStart(2, "0")}:${String(world.meta.minute % 60).padStart(2, "0")}`
     : "--:--";
@@ -937,51 +843,7 @@ export function ThemedWorldScreen({
           onDecorationMove={onDecorationMove}
           onDecorationRemove={onDecorationRemove}
           onSpeakerChange={setActiveResidentId}
-          showWorldline={worldlineVisible}
         />
-        {worldlineVisible && (
-          <WorldRecordChain
-            config={config}
-            resident={activeResident}
-            tick={tick}
-            personalityVersion={personalityVersion}
-          />
-        )}
-
-        <div className="themed-world-layers">
-          <b>MAP LAYERS</b>
-          <div>
-            <button
-              type="button"
-              aria-pressed={worldlineVisible}
-              onClick={() => setWorldlineVisible(current => !current)}
-            >
-              <i className={worldlineVisible ? "is-on" : ""}/>
-            </button>
-            <button type="button" onClick={onOpenWorldline}>Worldline <ArrowRight size={9}/></button>
-          </div>
-          <div>
-            <button
-              type="button"
-              aria-pressed={visitorVisible}
-              onClick={() => setVisitorVisible(current => !current)}
-            >
-              <i className={visitorVisible ? "is-on" : ""}/>
-            </button>
-            <button type="button" onClick={onOpenVisitor}>Visitor <ArrowRight size={9}/></button>
-          </div>
-        </div>
-
-        {visitorVisible && (
-          <button type="button" className="themed-world-visitor" onClick={onOpenVisitor}>
-            <i/>
-            {config.id === "fitness"
-              ? "训练观察员正在抵达"
-              : config.id === "learning"
-                ? "交换生正在抵达"
-                : "零件信使正在抵达"}
-          </button>
-        )}
         <button
           type="button"
           className={`themed-world-chain-skill ${chainReceiptVisible ? "is-receipt" : ""}`}
@@ -1004,9 +866,6 @@ export function ThemedWorldScreen({
       </section>
 
       <footer className="themed-world-screen__footer">
-        <button type="button" onClick={onOpenWorldline}><Route size={12} />世界线</button>
-        <button type="button" onClick={onOpenVisitor}><Globe size={12} />访客</button>
-        <button type="button" onClick={onOpenAgents}><Package size={12} />居民档案</button>
         <button type="button" className="themed-world-screen__progress" onClick={() => setLearningProgressOpen(true)}>
           <BookOpen size={11}/>
           <span>学习 {learnedCount}/{config.learningRecords.length} · {worldTopic}</span>

@@ -2,17 +2,15 @@ import {
   ConcentricPlazaMap,
   type ConcentricPlazaMember,
   type FeaturedPlazaHouse,
+  type PlazaConverseLine,
   type PlazaUserHouse,
 } from "./ConcentricPlazaMap";
-import type { PlazaSkill } from "./plazaSkills";
 
 export type WebPlazaMember = ConcentricPlazaMember;
 
 type WebPlazaSceneProps = {
   members: WebPlazaMember[];
-  skills: PlazaSkill[];
   onOpenAgent: (agentId: string) => void;
-  onOpenSkill: (skillId: string) => void;
   featuredHouses?: FeaturedPlazaHouse[];
   userHouse?: PlazaUserHouse | null;
   selectingHouse?: boolean;
@@ -20,6 +18,8 @@ type WebPlazaSceneProps = {
   onOpenUserWorld?: () => void;
   focusMemberId?: string | null;
   focusRequest?: number;
+  conversePair?: [string, string] | null;
+  converseLine?: PlazaConverseLine | null;
 };
 
 export function WebPlazaScene(props: WebPlazaSceneProps) {
