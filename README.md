@@ -10,14 +10,14 @@
 MyTamagotchi/
 ├── backend/                 ★ 唯一共享后端（FastAPI + SQLModel + SQLite）
 │   ├── app/                    业务接口、技能运行时、LLM 编排
-│   ├── skills/                 可执行技能定义（heytea-poster / vedic-astro）
-│   └── world_engine/           ForkWorld 世界生成/互访逻辑（待接线成 REST/WS 路由）
+│   ├── skills/                 可执行技能定义（heytea-poster / vedic-astro / skill-forge / custom-*）
+│   └── world_engine/           ForkWorld 世界生成/互访逻辑（已接线：/api/worlds /profile /bump /visit /ws）
 ├── contracts/               ★ 三端与后端的共享接口契约（JSON Schema）
 │   ├── world.schema.json
 │   ├── visit_result.schema.json
 │   └── bump_event.schema.json
 ├── frontends/
-│   ├── mobile/              📱 手机端（React + Vite + Tailwind v4，像素风宠物养成）
+│   ├── mobile/              📱 手机端（ForkWorld UI：世界/广场/技能锻造/拍照捕获，接真后端）
 │   ├── bigscreen/           🖥️ 大屏端（ForkWorld 世界地图，纯静态 Phaser，投屏 ?bg=1）
 │   └── hardware/            🎛️ 硬件端（Tuya T5AI-Board · LVGL 原生固件）
 ├── docs/                    技术架构 + 产品方案
