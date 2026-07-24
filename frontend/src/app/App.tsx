@@ -8745,12 +8745,12 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col items-center"
+    <div className="forkworld-demo-stage min-h-screen flex flex-col items-center"
       style={{ background: "#2A2420", fontFamily: "Press Start 2P,monospace" }}>
       <GlobalStyles/>
 
       {/* Phone frame */}
-      <div className="relative mt-8 mb-8"
+      <div className="forkworld-phone-shell relative mt-8 mb-8"
         style={{
           width: "390px",
           height: "780px",
@@ -8762,7 +8762,7 @@ export default function App() {
           flexDirection: "column",
         }}>
         {/* Screen content */}
-        <div className="flex-1 overflow-hidden flex flex-col" style={{ paddingTop: 4 }}>
+        <div className="forkworld-screen-content flex-1 overflow-hidden flex flex-col" style={{ paddingTop: 4 }}>
           <AnimatePresence mode="wait">
             <motion.div
               key={bottomTab + (detailScreen ?? "") + homeSub + captureSub + gallerySub}
@@ -8777,7 +8777,7 @@ export default function App() {
         </div>
 
         {/* Bottom nav — always fixed, always the same 5 tabs */}
-        <div style={{
+        <div className="forkworld-bottom-nav" style={{
           display: "flex", alignItems: "center",
           padding: "8px 8px 4px",
           borderTop: "1px solid rgba(28,25,17,0.1)",
@@ -8811,12 +8811,12 @@ export default function App() {
         </div>
 
         {/* Home indicator */}
-        <div style={{ display: "flex", justifyContent: "center", paddingBottom: 6 }}>
+        <div className="forkworld-home-indicator" style={{ display: "flex", justifyContent: "center", paddingBottom: 6 }}>
           <div style={{ width: 112, height: 4, borderRadius: 2, background: "rgba(28,25,17,0.18)" }}/>
         </div>
       </div>
 
-      <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "var(--ui-font-section)", fontFamily: "VT323,monospace", marginBottom: 24 }}>
+      <p className="forkworld-demo-caption" style={{ color: "rgba(255,255,255,0.35)", fontSize: "var(--ui-font-section)", fontFamily: "VT323,monospace", marginBottom: 24 }}>
         ForkWorld · tap bottom tabs to navigate
       </p>
     </div>

@@ -37,7 +37,7 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
     }).catch(() => undefined);
 
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      const reloadKey = "forkworld.pwaReloaded.v1";
+      const reloadKey = "forkworld.pwaReloaded.v2";
       if (window.sessionStorage.getItem(reloadKey)) return;
       window.sessionStorage.setItem(reloadKey, "1");
       window.location.reload();
