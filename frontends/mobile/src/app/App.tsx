@@ -5617,6 +5617,7 @@ function PlazaScreen({
   const [plazaTab, setPlazaTab] = useState<"square" | "agents" | "skills">("square");
   const [focusedPlazaAgentId, setFocusedPlazaAgentId] = useState<string | null>(null);
   const [plazaFocusRequest, setPlazaFocusRequest] = useState(0);
+  const plazaManualFollowRef = useRef(false);
   // 后端 DB 数据：广场 agents / 在场技能目录 / 学习对话
   const [dbPlazaAgents, setDbPlazaAgents] = useState<BackendAgent[]>([]);
   const [dbSkills, setDbSkills] = useState<CatalogSkill[]>([]);
@@ -5700,6 +5701,7 @@ function PlazaScreen({
 
   const startPlazaConverse = async () => {
     if (conversing) return;
+    plazaManualFollowRef.current = false;
     setConversing(true);
     setConverseError(null);
     setConverseLines([]);
@@ -5709,6 +5711,12 @@ function PlazaScreen({
       const result = await backendApi.plazaConverse();
       setConverseLines(result.lines);
       setConverseIndex(0);
+      if (result.lines[0] && !plazaManualFollowRef.current) {
+        setFocusedPlazaAgentId(String(result.lines[0].agent_id));
+        setPlazaFocusRequest(request => request + 1);
+      } else if (!result.lines[0] && !plazaManualFollowRef.current) {
+        setFocusedPlazaAgentId(null);
+      }
       let index = 0;
       converseTimerRef.current = window.setInterval(() => {
         index += 1;
@@ -5718,14 +5726,19 @@ function PlazaScreen({
           setConverseLines([]);
           setConverseIndex(0);
           setConversing(false);
+          if (!plazaManualFollowRef.current) setFocusedPlazaAgentId(null);
           if (result.learned) refreshPlazaData();
           return;
         }
         setConverseIndex(index);
+        if (!plazaManualFollowRef.current) {
+          setFocusedPlazaAgentId(String(result.lines[index].agent_id));
+        }
       }, 3000);
     } catch (caught) {
       setConverseError(caught instanceof Error ? caught.message : "对谈失败，请重试");
       setConversing(false);
+      if (!plazaManualFollowRef.current) setFocusedPlazaAgentId(null);
     }
   };
 
@@ -5896,6 +5909,11 @@ function PlazaScreen({
                 focusMemberId={focusedPlazaAgentId}
                 focusRequest={plazaFocusRequest}
                 onOpenAgent={agentId => setProfileAgentId(Number(agentId))}
+                onFollowAgent={agentId => {
+                  plazaManualFollowRef.current = true;
+                  setFocusedPlazaAgentId(agentId);
+                  setPlazaFocusRequest(request => request + 1);
+                }}
                 conversePair={conversing ? conversePair : null}
                 converseLine={conversing && activeConverseLine ? {
                   memberId: String(activeConverseLine.agent_id),

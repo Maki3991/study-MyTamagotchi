@@ -11,6 +11,7 @@ export type WebPlazaMember = ConcentricPlazaMember;
 type WebPlazaSceneProps = {
   members: WebPlazaMember[];
   onOpenAgent: (agentId: string) => void;
+  onFollowAgent?: (agentId: string) => void;
   featuredHouses?: FeaturedPlazaHouse[];
   userHouse?: PlazaUserHouse | null;
   selectingHouse?: boolean;

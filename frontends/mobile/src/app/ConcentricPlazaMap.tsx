@@ -46,6 +46,7 @@ export type PlazaConverseLine = {
 type ConcentricPlazaMapProps = {
   members: ConcentricPlazaMember[];
   onOpenAgent: (agentId: string) => void;
+  onFollowAgent?: (agentId: string) => void;
   featuredHouses?: FeaturedPlazaHouse[];
   userHouse?: PlazaUserHouse | null;
   selectingHouse?: boolean;
@@ -82,6 +83,8 @@ const STAGE_WIDTH = 1672;
 const STAGE_HEIGHT = 941;
 const MIN_SCALE = 0.22;
 const MAX_SCALE = 2.2;
+const FOLLOW_SCALE = 0.82;
+const FOLLOW_SMOOTHING = 0.06;
 const PLAZA_FOCUS = { x: 380, y: 80, width: 912, height: 780 };
 
 const HOUSE_SLOTS: HouseSlot[] = [
@@ -143,6 +146,7 @@ function getGesture(points: Map<number, PointerPoint>) {
 export function ConcentricPlazaMap({
   members,
   onOpenAgent,
+  onFollowAgent,
   featuredHouses = [],
   userHouse = null,
   selectingHouse = false,
@@ -158,9 +162,14 @@ export function ConcentricPlazaMap({
   const viewportSizeRef = useRef({ width: 0, height: 0 });
   const pointersRef = useRef(new Map<number, PointerPoint>());
   const gestureRef = useRef<ReturnType<typeof getGesture>>(null);
+  const memberWanderRefs = useRef(new Map<string, HTMLSpanElement>());
+  const followActiveRef = useRef(false);
+  const cancelledFocusRequestRef = useRef<number | null>(null);
   const [view, setView] = useState(viewRef.current);
   const [dragging, setDragging] = useState(false);
   const [activeHouseId, setActiveHouseId] = useState<string | null>(null);
+  const [activeMemberId, setActiveMemberId] = useState<string | null>(null);
+  const [followingMemberId, setFollowingMemberId] = useState<string | null>(null);
 
   const houses = useMemo(() => HOUSE_SLOTS.map((house, index) => {
     const memberIndex = OCCUPIED_HOUSE_INDEXES.indexOf(index);
@@ -172,6 +181,7 @@ export function ConcentricPlazaMap({
     };
   }), [featuredHouses, members, userHouse]);
   const activeHouse = houses.find(house => house.id === activeHouseId);
+  const activeMember = members.find(member => member.id === activeMemberId);
   const memberPositionById = (memberId: string) => {
     const index = members.findIndex(member => member.id === memberId);
     if (index < 0) return null;
@@ -233,24 +243,77 @@ export function ConcentricPlazaMap({
     });
   }, [commitView]);
 
-  const focusOnMember = useCallback(() => {
-    if (!focusMemberId || focusRequest === 0) return;
-    const memberIndex = members.findIndex(member => member.id === focusMemberId);
-    if (memberIndex < 0) return;
-    const { width, height } = viewportSizeRef.current;
-    if (!width || !height) return;
-    const position = MEMBER_POSITIONS[memberIndex % MEMBER_POSITIONS.length];
-    const scale = Math.max(viewRef.current.scale, 0.82);
-    commitView({
-      scale,
-      x: width / 2 - position.x * scale,
-      y: height / 2 - position.y * scale,
-    });
-  }, [commitView, focusMemberId, focusRequest, members]);
+  const stopFollowing = useCallback(() => {
+    if (!followActiveRef.current) return;
+    followActiveRef.current = false;
+    cancelledFocusRequestRef.current = focusRequest;
+    setFollowingMemberId(null);
+  }, [focusRequest]);
 
   useEffect(() => {
-    focusOnMember();
-  }, [focusOnMember]);
+    const memberExists = Boolean(
+      focusMemberId && members.some(member => member.id === focusMemberId),
+    );
+    if (
+      !focusMemberId
+      || focusRequest === 0
+      || !memberExists
+      || cancelledFocusRequestRef.current === focusRequest
+    ) {
+      followActiveRef.current = false;
+      setFollowingMemberId(null);
+      return;
+    }
+
+    followActiveRef.current = true;
+    setFollowingMemberId(focusMemberId);
+    let animationFrame = 0;
+    let previousTime = performance.now();
+
+    const followFrame = (time: number) => {
+      if (
+        !followActiveRef.current
+        || cancelledFocusRequestRef.current === focusRequest
+      ) return;
+
+      const viewport = viewportRef.current;
+      const target = memberWanderRefs.current.get(focusMemberId);
+      const { width, height } = viewportSizeRef.current;
+      if (viewport && target && width && height) {
+        const current = viewRef.current;
+        const viewportBounds = viewport.getBoundingClientRect();
+        const targetBounds = target.getBoundingClientRect();
+        const targetX = (
+          targetBounds.left
+          + targetBounds.width / 2
+          - viewportBounds.left
+          - current.x
+        ) / current.scale;
+        const targetY = (
+          targetBounds.top
+          + targetBounds.height / 2
+          - viewportBounds.top
+          - current.y
+        ) / current.scale;
+        const targetScale = Math.max(current.scale, FOLLOW_SCALE);
+        const elapsedFrames = Math.min(4, Math.max(0.25, (time - previousTime) / (1000 / 60)));
+        const smoothing = 1 - Math.pow(1 - FOLLOW_SMOOTHING, elapsedFrames);
+
+        commitView({
+          scale: current.scale + (targetScale - current.scale) * smoothing,
+          x: current.x + (width / 2 - targetX * targetScale - current.x) * smoothing,
+          y: current.y + (height / 2 - targetY * targetScale - current.y) * smoothing,
+        });
+      }
+      previousTime = time;
+      animationFrame = window.requestAnimationFrame(followFrame);
+    };
+
+    animationFrame = window.requestAnimationFrame(followFrame);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [commitView, focusMemberId, focusRequest, members]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -258,14 +321,13 @@ export function ConcentricPlazaMap({
     const resize = () => {
       const bounds = viewport.getBoundingClientRect();
       viewportSizeRef.current = { width: bounds.width, height: bounds.height };
-      if (focusMemberId && focusRequest > 0) focusOnMember();
-      else fitPlaza();
+      if (!followActiveRef.current) fitPlaza();
     };
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [fitPlaza, focusMemberId, focusOnMember, focusRequest]);
+  }, [fitPlaza]);
 
   const pointFromEvent = (event: ReactPointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -274,6 +336,7 @@ export function ConcentricPlazaMap({
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
+    stopFollowing();
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, pointFromEvent(event));
     gestureRef.current = getGesture(pointersRef.current);
@@ -320,6 +383,7 @@ export function ConcentricPlazaMap({
 
   const handleWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
     event.preventDefault();
+    stopFollowing();
     const bounds = event.currentTarget.getBoundingClientRect();
     zoomAt(event.deltaY > 0 ? 0.9 : 1.1, {
       x: event.clientX - bounds.left,
@@ -337,16 +401,20 @@ export function ConcentricPlazaMap({
     };
     if (offsets[event.key]) {
       event.preventDefault();
+      stopFollowing();
       const [x, y] = offsets[event.key];
       commitView({ ...current, x: current.x + x, y: current.y + y });
     } else if (event.key === "+" || event.key === "=") {
       event.preventDefault();
+      stopFollowing();
       zoomAt(1.15);
     } else if (event.key === "-") {
       event.preventDefault();
+      stopFollowing();
       zoomAt(1 / 1.15);
     } else if (event.key === "0" || event.key === "Home") {
       event.preventDefault();
+      stopFollowing();
       fitPlaza();
     }
   };
@@ -354,7 +422,11 @@ export function ConcentricPlazaMap({
   return (
     <section
       ref={viewportRef}
-      className={`concentric-plaza-map ${dragging ? "is-dragging" : ""}`}
+      className={[
+        "concentric-plaza-map",
+        dragging ? "is-dragging" : "",
+        followingMemberId ? "is-following" : "",
+      ].filter(Boolean).join(" ")}
       aria-label="ForkWorld 同心广场大地图"
       tabIndex={0}
       onPointerDown={handlePointerDown}
@@ -364,6 +436,7 @@ export function ConcentricPlazaMap({
       onWheel={handleWheel}
       onDoubleClick={event => {
         if ((event.target as HTMLElement).closest("button")) return;
+        stopFollowing();
         const bounds = event.currentTarget.getBoundingClientRect();
         zoomAt(1.28, { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
       }}
@@ -431,6 +504,7 @@ export function ConcentricPlazaMap({
                     onOpenUserWorld();
                     return;
                   }
+                  setActiveMemberId(null);
                   setActiveHouseId(house.id);
                 }}
               >
@@ -475,11 +549,12 @@ export function ConcentricPlazaMap({
           return (
             <button
               type="button"
-              className={`concentric-plaza-map__member ${focusMemberId === member.id ? "is-focused" : ""}`}
+              className={`concentric-plaza-map__member ${followingMemberId === member.id ? "is-focused" : ""}`}
               key={member.id}
               onClick={event => {
                 event.stopPropagation();
-                onOpenAgent(member.id);
+                setActiveHouseId(null);
+                setActiveMemberId(member.id);
               }}
               style={{
                 left: position.x,
@@ -493,9 +568,15 @@ export function ConcentricPlazaMap({
                 "--member-end-y": `${position.dy * 0.35}px`,
                 "--member-delay": `${-index * 0.55}s`,
               } as CSSProperties}
-              aria-label={`查看 ${member.name} 的 Agent 档案`}
+              aria-label={`開啟 ${member.name} 的 Agent 操作選單`}
             >
-              <span className="concentric-plaza-map__member-wander">
+              <span
+                className="concentric-plaza-map__member-wander"
+                ref={node => {
+                  if (node) memberWanderRefs.current.set(member.id, node);
+                  else memberWanderRefs.current.delete(member.id);
+                }}
+              >
                 <span className="concentric-plaza-map__member-art">{member.art}</span>
                 <span className="concentric-plaza-map__member-label">
                   <strong>{member.name}</strong>
@@ -508,7 +589,15 @@ export function ConcentricPlazaMap({
       </div>
 
       <header className="concentric-plaza-map__status">
-        <span><Radio size={10} /> {selectingHouse ? "SELECT A HOME" : "LIVE PLAZA"}</span>
+        {followingMemberId ? (
+          <button type="button" onClick={stopFollowing} aria-label="停止跟拍，切回手動瀏覽">
+            <Radio size={10} />
+            跟拍中 · {members.find(member => member.id === followingMemberId)?.name}
+            <i aria-hidden="true">×</i>
+          </button>
+        ) : (
+          <span><Radio size={10} /> {selectingHouse ? "SELECT A HOME" : "LIVE PLAZA"}</span>
+        )}
         <b><Users size={10} /> {members.length} AGENTS · {HOUSE_SLOTS.length} HOUSES</b>
       </header>
 
@@ -547,13 +636,36 @@ export function ConcentricPlazaMap({
         </aside>
       )}
 
+      {activeMember && (
+        <aside className="concentric-plaza-map__member-card" onPointerDown={event => event.stopPropagation()}>
+          <button type="button" aria-label="關閉 Agent 操作選單" onClick={() => setActiveMemberId(null)}>×</button>
+          <span>PLAZA AGENT</span>
+          <strong>{activeMember.name}</strong>
+          <small>{activeMember.origin}</small>
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                onFollowAgent?.(activeMember.id);
+                setActiveMemberId(null);
+              }}
+            >
+              跟隨他
+            </button>
+            <button type="button" onClick={() => onOpenAgent(activeMember.id)}>查看檔案</button>
+          </div>
+        </aside>
+      )}
+
       <nav className="concentric-plaza-map__controls" aria-label="大地图控制" onPointerDown={event => event.stopPropagation()}>
-        <button type="button" onClick={() => zoomAt(1 / 1.18)} aria-label="缩小地图"><Minus size={14} /></button>
-        <button type="button" onClick={fitPlaza} aria-label="显示完整圆形广场"><Home size={14} /></button>
-        <button type="button" onClick={() => zoomAt(1.18)} aria-label="放大地图"><Plus size={14} /></button>
+        <button type="button" onClick={() => { stopFollowing(); zoomAt(1 / 1.18); }} aria-label="缩小地图"><Minus size={14} /></button>
+        <button type="button" onClick={() => { stopFollowing(); fitPlaza(); }} aria-label="显示完整圆形广场"><Home size={14} /></button>
+        <button type="button" onClick={() => { stopFollowing(); zoomAt(1.18); }} aria-label="放大地图"><Plus size={14} /></button>
       </nav>
 
-      <div className="concentric-plaza-map__hint">拖拽移动 · 滚轮或双指缩放 · 双击放大</div>
+      <div className="concentric-plaza-map__hint">
+        {followingMemberId ? "正在跟拍 · 拖拽或缩放可切回手动" : "拖拽移动 · 滚轮或双指缩放 · 双击放大"}
+      </div>
     </section>
   );
 }

@@ -23,6 +23,10 @@
   cursor: grabbing;
 }
 
+.concentric-plaza-map.is-following {
+  cursor: default;
+}
+
 .concentric-plaza-map button {
   font: inherit;
 }
@@ -404,6 +408,7 @@
 .concentric-plaza-map__status,
 .concentric-plaza-map__zoom,
 .concentric-plaza-map__house-card,
+.concentric-plaza-map__member-card,
 .concentric-plaza-map__selection-note,
 .concentric-plaza-map__controls,
 .concentric-plaza-map__hint {
@@ -427,6 +432,7 @@
 }
 
 .concentric-plaza-map__status span,
+.concentric-plaza-map__status button,
 .concentric-plaza-map__status b {
   display: flex;
   align-items: center;
@@ -438,6 +444,34 @@
 
 .concentric-plaza-map__status span {
   color: #4a7fa5;
+}
+
+.concentric-plaza-map__status button {
+  padding: 0;
+  color: #e8634a;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.concentric-plaza-map__status button:hover,
+.concentric-plaza-map__status button:focus-visible {
+  color: #b5482f;
+  outline: none;
+}
+
+.concentric-plaza-map__status button i {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  margin-left: 1px;
+  color: #777268;
+  background: rgba(28, 25, 17, .07);
+  border-radius: 50%;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+  place-items: center;
 }
 
 .concentric-plaza-map__status b {
@@ -487,7 +521,8 @@
 }
 
 .concentric-plaza-map__controls button,
-.concentric-plaza-map__house-card button {
+.concentric-plaza-map__house-card button,
+.concentric-plaza-map__member-card button {
   display: grid;
   color: #54534d;
   background: #faf7ef;
@@ -530,7 +565,17 @@
   border-radius: 14px;
 }
 
-.concentric-plaza-map__house-card > button:first-child {
+.concentric-plaza-map__member-card {
+  bottom: 52px;
+  left: 10px;
+  display: grid;
+  width: min(220px, calc(100% - 20px));
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.concentric-plaza-map__house-card > button:first-child,
+.concentric-plaza-map__member-card > button:first-child {
   position: absolute;
   top: 7px;
   right: 7px;
@@ -545,16 +590,59 @@
   letter-spacing: .8px;
 }
 
+.concentric-plaza-map__member-card > span {
+  color: #4a7fa5;
+  font-size: 8px;
+  letter-spacing: .8px;
+}
+
 .concentric-plaza-map__house-card > strong {
   margin-top: 4px;
   padding-right: 24px;
   font-size: 13px;
 }
 
+.concentric-plaza-map__member-card > strong {
+  margin-top: 4px;
+  padding-right: 24px;
+  font-size: 14px;
+}
+
 .concentric-plaza-map__house-card > small {
   margin-top: 3px;
   color: #777268;
   font-size: 8px;
+}
+
+.concentric-plaza-map__member-card > small {
+  margin-top: 3px;
+  color: #777268;
+  font-size: 9px;
+}
+
+.concentric-plaza-map__member-card > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.concentric-plaza-map__member-card > div button {
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 9px;
+}
+
+.concentric-plaza-map__member-card > div button:first-child {
+  color: white;
+  background: #e8634a;
+  border-color: #b5482f;
+}
+
+.concentric-plaza-map__member-card > div button:hover,
+.concentric-plaza-map__member-card > div button:focus-visible {
+  filter: brightness(.96);
+  outline: 2px solid rgba(232, 99, 74, .25);
 }
 
 .concentric-plaza-map__house-card > button:last-child:not(:first-child) {

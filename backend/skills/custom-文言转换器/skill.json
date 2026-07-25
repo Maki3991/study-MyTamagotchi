@@ -1,0 +1,27 @@
+{
+  "def_id": "custom-文言转换器",
+  "name": "文言转换",
+  "emoji": "📜",
+  "category": "创作",
+  "description": "输入白话文，一键转换为文雅古风的文言文",
+  "kind": "prompt",
+  "source_repo": "forged-in-app",
+  "inputs": [
+    {
+      "key": "source_text",
+      "label": "待转换文本",
+      "type": "text",
+      "required": true,
+      "placeholder": "请输入您想转换为文言文的段落..."
+    }
+  ],
+  "output": {
+    "type": "markdown"
+  },
+  "cta": "开始转换",
+  "capabilities": [
+    "准确理解白话文语义并忠实转译",
+    "输出符合唐宋文雅风格的地道文言文",
+    "提供转换依据说明，增强学习性与可读性"
+  ]
+}
