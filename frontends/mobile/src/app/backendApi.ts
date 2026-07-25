@@ -47,7 +47,6 @@ export type BackendAgent = {
   owner_id: number;
   owner_name: string;
   name: string;
-  category: string;
   image: string; // agent 外表：capture 管线生成的角色图 URL
   trait: string;
   mood: number;
@@ -87,7 +86,6 @@ export type DialogLine = { agent_id: number; name: string; image: string; text: 
 export type AgentTemplateRow = {
   id: number;
   name: string;
-  category: string;
   image: string;
   trait: string;
   description: string;
@@ -123,6 +121,11 @@ export const backendApi = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
+  dispatch: (agentId: number, location: AgentLocation | "home") =>
+    req<BackendAgent>(`/agents/${agentId}/dispatch`, {
+      method: "POST",
+      body: JSON.stringify({ location }),
+    }),
   plazaAgents: () => req<BackendAgent[]>("/plaza"),
   plazaConverse: () =>
     req<{ lines: DialogLine[]; learned: { learner: string; learner_id: number; teacher: string; skill: string } | null }>(
@@ -130,7 +133,7 @@ export const backendApi = {
       { method: "POST" },
     ),
   worldConverse: (location?: AgentLocation) =>
-    req<{ lines: DialogLine[] }>("/world/converse", {
+    req<{ lines: DialogLine[]; insights: { agent_id: number; name: string; text: string }[] }>("/world/converse", {
       method: "POST",
       body: JSON.stringify({ user_id: ME_USER_ID, location: location ?? null }),
     }),

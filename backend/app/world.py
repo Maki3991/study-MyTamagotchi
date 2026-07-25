@@ -65,11 +65,11 @@ def agent_world_view(a: Agent, session: Session) -> dict:
     return {
         "id": f"agent-{a.id}",
         "name": a.name,
-        "role": profile.get("role") or a.category,
+        "role": profile.get("role") or "伙伴",
         "world": WORLD_NAME.get(a.location, a.location),
         "color": "#E8634A",
         "location": random.Random(a.id).choice(LOCATIONS.get(a.location, ["小广场"])),
-        "goal": profile.get("goal") or f"陪伴主人，做一只快乐的{a.category}",
+        "goal": profile.get("goal") or "陪伴主人，做一只快乐的小伙伴",
         "mood": _mood_word(a.mood),
         "energy": a.mood,
         "personalityVersion": 1,
@@ -174,7 +174,7 @@ async def _generate_event(session: Session, meta: WorldMeta) -> None:
     etype = random.choice(EVENT_TYPES)
 
     brief = "\n".join(
-        f"agent-{a.id}: {a.name}（{a.category}，性格：{a.trait}，心情：{_mood_word(a.mood)}）"
+        f"agent-{a.id}: {a.name}（性格：{a.trait}，心情：{_mood_word(a.mood)}）"
         for a in participants
     )
     gen = await llm.chat_json([
