@@ -1,8 +1,16 @@
 // FastAPI 后端客户端：agents / plaza / skills / forge / learn
+// ============================================================
+// PART 1 / 第 1 部分：后端地址配置（当前第 3-10 行）
+// 作用：规定本文件所有请求要发往哪个后端服务。
+// ============================================================
 const API_BASE = (import.meta.env.VITE_WORLD_API_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
 const API_ORIGIN = API_BASE.replace(/\/api$/, "");
 
 /** 把后端返回的相对资源路径（如 /api/pets/xx/files/final）解析成可加载的 URL。 */
+// ============================================================
+// PART 2 / 第 2 部分：资源地址辅助工具（当前第 11-21 行）
+// 作用：把后端返回的相对图片路径转换成浏览器可以访问的完整 URL。
+// ============================================================
 export function resolveApiAssetUrl(url: string): string {
   if (!url) return url;
   return url.startsWith("http") || url.startsWith("blob:") || url.startsWith("data:")
@@ -10,6 +18,11 @@ export function resolveApiAssetUrl(url: string): string {
     : `${API_ORIGIN}${url}`;
 }
 
+// ============================================================
+// PART 3 / 第 3 部分：共享常量与 TypeScript 数据类型（当前第 22-107 行）
+// 作用：描述前后端之间交换的 JSON 数据长什么样，并提供共用常量。
+// 注意：`export type` 只是编译时说明，不是浏览器运行时功能。
+// ============================================================
 export const ME_USER_ID = 1;
 
 /** agent 唯一的位置：一定在自己的三个世界之一或广场。 */
@@ -91,6 +104,11 @@ export type AgentTemplateRow = {
   description: string;
 };
 
+// ============================================================
+// PART 4 / 第 4 部分：通用请求封装（当前第 108-124 行）
+// 作用：统一处理 fetch、请求头、错误判断和 JSON 响应解析。
+// 下面的 backendApi.* 函数都会间接调用这里。
+// ============================================================
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -103,10 +121,20 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ============================================================
+// PART 5 / 第 5 部分：backendApi 业务函数目录（当前第 125-133 行）
+// 作用：开始集中列出前端可以调用的后端业务函数。
+// ============================================================
 export const backendApi = {
   agents: (ownerId?: number) =>
     req<BackendAgent[]>(`/agents${ownerId != null ? `?owner_id=${ownerId}` : ""}`),
   agent: (id: number) => req<BackendAgentDetail>(`/agents/${id}`),
+
+  // ============================================================
+  // PART 6 / 第 6 部分：写入与业务动作 API（当前第 134-206 行）
+  // 包括修改、聊天、派遣、日记、Plaza 学习、Skill Forge 和 Skill 执行。
+  // 你要找的 backendApi.dispatch 就定义在这个对象的下面。
+  // ============================================================
   patchAgent: (
     id: number,
     patch: Partial<{

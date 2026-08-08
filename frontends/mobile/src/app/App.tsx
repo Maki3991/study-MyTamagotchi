@@ -1891,6 +1891,7 @@ function myWorldResidents(myAgents: BackendAgent[], worldKey: ThemedWorldKey): T
 // ── SCREENS ────────────────────────────────────────────────────────────────────
 
 // 1. WORLD DOCK
+// 学习导航 6A：世界总览页。这里展示三个世界入口，并通过 navigate 请求切换页面。
 function WorldDockScreen({
   navigate,
   sceneControl,
@@ -4137,6 +4138,7 @@ const THEMED_PRESET_ASSETS: Record<ThemedWorldKey, ThemedPresetAsset[]> = {
   ],
 };
 
+// 学习导航 6B：具体世界页外壳。worldKey 决定显示 Vitality Gym、Learning Commons 或 Maker Harbor。
 function ThemedWorldHostScreen({
   worldKey,
   navigate,
@@ -6482,6 +6484,8 @@ function PlazaScreen({
   );
 }
 
+// 学习导航 3：顶部 Scene / Agents / Plaza 导航。它通过 Props 接收状态，通过回调通知 App 用户点击了什么。
+// LEARNING MAP: scene/view are Props from App; the two on... values are callbacks back to App.
 function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
   scene: HomeScene;
   view: HomeView;
@@ -6601,7 +6605,10 @@ function HomeTopTabs({ scene, view, onSceneChange, onViewChange, accent }: {
 type BottomTab = "home" | "capture" | "gallery";
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
+// 学习导航 2：App 是当前前端界面的总控组件。页面切换所需的关键 State 从这里开始找。
 export default function App() {
+  // LEARNING MAP: in lesson 01, follow only these four pieces of UI state.
+  // bottomTab = bottom menu; homeView = Home section; homeSub = selected world; detailScreen = detail page.
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [capturedPets, setCapturedPets] = useState<PetAsset[]>([]);
   const [latestCapturedPet, setLatestCapturedPet] = useState<PetAsset | null>(null);
@@ -6614,6 +6621,7 @@ export default function App() {
 
   // Home tab sub-state: worldDock + 3 worlds（每个用户固定这三个世界，创建世界已停用）
   const [homeSub, setHomeSub] = useState<HomeScene>("worldDock");
+  // 学习导航 2A：homeView 是当前值；setHomeView 是修改它并通知 React 更新界面的函数。
   const [homeView, setHomeView] = useState<HomeView>("scene");
   // Capture tab sub-state
   const [captureSub, setCaptureSub] = useState<"camera"|"extract"|"lineArt"|"bringToLife">("camera");
@@ -6724,6 +6732,7 @@ export default function App() {
     setEditorDraft({ ...agentDrafts[editingAgentId] });
   };
 
+  // 学习导航 4：项目自己的页面跳转函数。它通过修改 State 改变当前显示的 Screen，不是浏览器 URL 路由。
   const navigate = (s: Screen) => {
     if (s === "worldDock")        { setBottomTab("home"); setHomeView("scene"); setHomeSub("worldDock"); setDetailScreen(null); return; }
     if (s === "everydayTown")     { setBottomTab("home"); setHomeView("scene"); setHomeSub("everyday");  setDetailScreen(null); return; }
@@ -6790,7 +6799,10 @@ export default function App() {
     }
   };
 
+  // 学习导航 5：读取 State，并决定当前应该显示哪个页面组件。
   const renderSection = () => {
+    // 学习导航 5A：这是项目自己命名的普通函数；它返回一组页面组件，React 再把结果显示到网页。
+    // LEARNING MAP: read in this order: detailScreen -> bottomTab -> homeView -> homeSub.
     if (detailScreen) {
       return (
         <div className="flex-1 overflow-hidden flex flex-col">
@@ -6840,6 +6852,7 @@ export default function App() {
             onOpen: () => navigate("futureColony"),
           },
         ];
+        // 学习导航：App 在这里把当前导航状态和回调组装成 sceneControl，再传给各个页面。
         const sceneControl = (
           <HomeTopTabs
             scene={homeSub}
@@ -6860,6 +6873,7 @@ export default function App() {
                   featuredHouses={featuredPlazaHouses}
                 />
               )}
+              {/* 学习导航：下面这些条件就是“State 决定显示哪个 Screen”的具体位置。 */}
               {homeView === "scene" && homeSub === "worldDock" && (
                 <WorldDockScreen
                   navigate={navigate}
