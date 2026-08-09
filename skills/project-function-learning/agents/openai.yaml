@@ -1,7 +1,0 @@
-interface:
-  display_name: "项目功能拆解学习"
-  short_description: "按真实功能链理解前后端项目的职责和数据流"
-  default_prompt: "Use $project-function-learning to explain one real project feature by its chronological data flow."
-
-policy:
-  allow_implicit_invocation: true
